@@ -15,6 +15,7 @@ struct MarkdownTheme {
     let separatorColor: UIColor
     let tableBorderColor: UIColor
     let tableHeaderColor: UIColor
+    let codeHeaderColor: UIColor
     
     static let `default` = MarkdownTheme(
         baseFont: .systemFont(ofSize: 15),
@@ -36,6 +37,7 @@ struct MarkdownTheme {
         quoteBorderColor: .systemGray4,
         separatorColor: .separator,
         tableBorderColor: .systemGray4,
-        tableHeaderColor: .systemGray5
+        tableHeaderColor: .systemGray5,
+        codeHeaderColor: .systemGray5
     )
 }

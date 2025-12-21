@@ -133,78 +133,42 @@ struct MyMarkdownParser: MarkupWalker {
     
     mutating func visitTable(_ table: Table) {
         // 1. Extract Data
-        // swift-markdown 0.7.3:
-        // - Table.Head 是一行表头，直接用 head.cells
-        // - Table.Body 才有 rows
-        let headers: [String] = table.head.cells.map { $0.myPlainText }
-        let rows: [[String]] = table.body.rows.map { $0.cells.map { $0.myPlainText } }
+        let headers: [NSAttributedString] = table.head.cells.map { cell in
+             var parser = InlineParser(theme: theme, baseFont: theme.boldFont)
+             parser.visit(cell)
+             return parser.attributedString
+        }
+        
+        let rows: [[NSAttributedString]] = table.body.rows.map { row in
+            row.cells.map { cell in
+                var parser = InlineParser(theme: theme, baseFont: theme.baseFont)
+                parser.visit(cell)
+                return parser.attributedString
+            }
+        }
 
         guard !headers.isEmpty else {
             return
         }
         
         // 2. Calculate Layout
-        let padding: CGFloat = 16
-        var colWidths = Array(repeating: CGFloat(0), count: headers.count)
-        
-        // Calculate max width for each column
-        let allRows = [headers] + rows
-        for row in allRows {
-            for (index, text) in row.enumerated() {
-                if index < colWidths.count {
-                    let width = (text as NSString).boundingRect(
-                        with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 30),
-                        options: .usesLineFragmentOrigin,
-                        attributes: [.font: theme.baseFont],
-                        context: nil
-                    ).width + padding
-                    colWidths[index] = max(colWidths[index], width)
-                }
-            }
-        }
-        
-        // Calculate row heights
-        var rowHeights: [CGFloat] = []
-        for (rowIndex, row) in allRows.enumerated() {
-            var maxHeight: CGFloat = 40 // Minimum height
-            let font = rowIndex == 0 ? theme.boldFont : theme.baseFont
-            
-            for (index, text) in row.enumerated() {
-                if index < colWidths.count {
-                    let width = colWidths[index]
-                    let height = (text as NSString).boundingRect(
-                        with: CGSize(width: width - 16, height: CGFloat.greatestFiniteMagnitude), // -16 for padding
-                        options: .usesLineFragmentOrigin,
-                        attributes: [.font: font],
-                        context: nil
-                    ).height + 16 // +16 for vertical padding
-                    maxHeight = max(maxHeight, height)
-                }
-            }
-            rowHeights.append(maxHeight)
-        }
-        
-        let totalWidth = colWidths.reduce(0, +)
-        let totalHeight = rowHeights.reduce(0, +)
-        let totalSize = CGSize(width: totalWidth, height: totalHeight)
+        let size = MarkdownTableView.computedSize(
+            headers: headers,
+            rows: rows,
+            theme: theme,
+            maxWidth: maxLayoutWidth
+        )
         
         // 3. Create View
         let view = MarkdownTableView(
             headers: headers,
             rows: rows,
-            columnWidths: colWidths,
-            rowHeights: rowHeights,
-            totalSize: totalSize,
             theme: theme
         )
         
-        // Attachment height is table height, width is screen width (or table width, whichever is smaller)
-        let attachmentSize = CGSize(width: min(totalWidth, maxLayoutWidth), height: totalHeight)
+        view.frame = CGRect(origin: .zero, size: size)
         
-        view.frame = CGRect(origin: .zero, size: attachmentSize)
-        view.translatesAutoresizingMaskIntoConstraints = false
-        
-        insertAttachment(view: view, size: attachmentSize)
+        insertAttachment(view: view, size: size)
     }
     
     // MARK: - Helper
@@ -227,6 +191,52 @@ struct MyMarkdownParser: MarkupWalker {
         attachments[location] = view
         
         attributedString.append(NSAttributedString(string: "\n"))
+    }
+}
+
+struct InlineParser: MarkupWalker {
+    var attributedString = NSMutableAttributedString()
+    let theme: MarkdownTheme
+    let baseFont: UIFont
+    
+    init(theme: MarkdownTheme, baseFont: UIFont) {
+        self.theme = theme
+        self.baseFont = baseFont
+    }
+    
+    mutating func visitText(_ text: Text) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: theme.textColor
+        ]
+        attributedString.append(NSAttributedString(string: text.string, attributes: attributes))
+    }
+    
+    mutating func visitStrong(_ strong: Strong) {
+        let start = attributedString.length
+        descendInto(strong)
+        let range = NSRange(location: start, length: attributedString.length - start)
+        attributedString.addAttribute(.font, value: theme.boldFont, range: range)
+    }
+    
+    mutating func visitEmphasis(_ emphasis: Emphasis) {
+        let start = attributedString.length
+        descendInto(emphasis)
+        let range = NSRange(location: start, length: attributedString.length - start)
+        attributedString.addAttribute(.font, value: theme.italicFont, range: range)
+    }
+    
+    mutating func visitInlineCode(_ inlineCode: InlineCode) {
+        let attributes: [NSAttributedString.Key: Any] = [
+             .font: theme.codeFont,
+             .backgroundColor: theme.codeBackgroundColor,
+             .foregroundColor: theme.codeTextColor
+        ]
+        attributedString.append(NSAttributedString(string: inlineCode.code, attributes: attributes))
+    }
+    
+    mutating func defaultVisit(_ markup: Markup) {
+        descendInto(markup)
     }
 }
 
