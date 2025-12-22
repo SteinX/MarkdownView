@@ -97,10 +97,6 @@ class QuoteView: UIView {
 
 // MARK: - Table View
 
-// MARK: - Table View
-
-// MARK: - Table View
-
 class MarkdownTableCell: UICollectionViewCell {
     let label = UILabel()
     
@@ -137,6 +133,7 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
     private let headers: [NSAttributedString]
     private let rows: [[NSAttributedString]]
     private let theme: MarkdownTheme
+    private let maxLayoutWidth: CGFloat
     
     private var scrollView: UIScrollView!
     private var collectionView: UICollectionView!
@@ -146,10 +143,11 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
     private var rowHeights: [CGFloat] = []
     private var tableContentSize: CGSize = .zero
     
-    init(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme) {
+    init(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
         self.headers = headers
         self.rows = rows
         self.theme = theme
+        self.maxLayoutWidth = maxLayoutWidth
         super.init(frame: .zero)
         calculateLayoutData()
         setupUI()
@@ -162,14 +160,14 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
     required init?(coder: NSCoder) { fatalError() }
     
     private func calculateLayoutData() {
-        let (width, height, widths, heights) = MarkdownTableView.calculateLayout(headers: headers, rows: rows, theme: theme)
+        let (width, height, widths, heights) = MarkdownTableView.calculateLayout(headers: headers, rows: rows, theme: theme, maxWidth: maxLayoutWidth)
         self.tableContentSize = CGSize(width: width, height: height)
         self.columnWidths = widths
         self.rowHeights = heights
     }
     
     private func setupUI() {
-        // 1. ScrollView for Horizontal Scrolling
+        // 1. ScrollView for Horizontal Scrolling (Logic handles if it's actually needed)
         scrollView = UIScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.bounces = false
@@ -181,7 +179,6 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
         let layout = UICollectionViewFlowLayout()
         layout.minimumInteritemSpacing = 0
         layout.minimumLineSpacing = 0
-        // No fixed itemSize here, sizeForItemAt delegate handles it
         layout.scrollDirection = .vertical
         
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
@@ -190,7 +187,7 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
         collectionView.register(MarkdownTableCell.self, forCellWithReuseIdentifier: "Cell")
         collectionView.backgroundColor = .clear
         collectionView.translatesAutoresizingMaskIntoConstraints = false
-        collectionView.isScrollEnabled = false // Inner content doesn't scroll itself
+        collectionView.isScrollEnabled = false
         
         scrollView.addSubview(collectionView)
         
@@ -264,57 +261,121 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
     // MARK: - Layout Calculation (Static & Internal)
     
     static func computedSize(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat) -> CGSize {
-        let (totalWidth, totalHeight, _, _) = calculateLayout(headers: headers, rows: rows, theme: theme)
-        // Return size clamped to maxWidth for the View frame, but retain full height
+        let (totalWidth, totalHeight, _, _) = calculateLayout(headers: headers, rows: rows, theme: theme, maxWidth: maxWidth)
+        // Ensure the view frame doesn't exceed screen width, even if content scrolls internals
         return CGSize(width: min(totalWidth, maxWidth), height: totalHeight)
     }
     
-    private static func calculateLayout(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme) -> (CGFloat, CGFloat, [CGFloat], [CGFloat]) {
+    private static func calculateLayout(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat) -> (CGFloat, CGFloat, [CGFloat], [CGFloat]) {
         let padding: CGFloat = 16
-        var colWidths = Array(repeating: CGFloat(0), count: headers.count)
+        let extraBuffer: CGFloat = 4
+        // The minimum reasonable width for a column to prevent complete crushing
+        let minColumnWidth: CGFloat = 60.0
         
         let allRows = [headers] + rows
+        let columnCount = headers.count
         
-        // 1. Widths
+        // 1. Calculate Intrinsic Widths (Single Line Max)
+        var intrinsicWidths = Array(repeating: CGFloat(0), count: columnCount)
+        
         for (rowIndex, _) in allRows.enumerated() {
              let row = allRows[rowIndex]
-            
             for (colIndex, val) in row.enumerated() {
-                if colIndex < colWidths.count {
-                    let width = val.boundingRect(
+                if colIndex < columnCount {
+                    let rect = val.boundingRect(
                         with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 1000),
-                        options: .usesLineFragmentOrigin,
+                        options: [.usesLineFragmentOrigin, .usesFontLeading],
                         context: nil
-                    ).width + padding + 1
-                    colWidths[colIndex] = max(colWidths[colIndex], width)
+                    )
+                    let width = ceil(rect.width) + padding + extraBuffer
+                    intrinsicWidths[colIndex] = max(intrinsicWidths[colIndex], width)
                 }
             }
         }
         
-        // 2. Heights
+        let totalIntrinsicWidth = intrinsicWidths.reduce(0, +)
+        var finalColWidths = intrinsicWidths
+        
+        // 2. Resolve Final Widths with wrapping logic
+        let hasEnoughSpace = totalIntrinsicWidth <= maxWidth
+        let canCompressIdeally = maxWidth >= (CGFloat(columnCount) * minColumnWidth)
+        
+        if !hasEnoughSpace && canCompressIdeally {
+            // Smart Compression Strategy:
+            // Identify "small" columns that fit comfortably within their share of space and freeze them.
+            // Distribute remaining space to "large" columns.
+            
+            var resolvedWidths = Array(repeating: CGFloat(0), count: columnCount)
+            var resolvedIndices = Set<Int>()
+            var remainingWidth = maxWidth
+            
+            // Iteratively find columns that are smaller than the average available slot
+            for _ in 0..<columnCount {
+                let remainingCount = CGFloat(columnCount - resolvedIndices.count)
+                if remainingCount == 0 { break }
+                
+                let averageAllocation = remainingWidth / remainingCount
+                var progressMade = false
+                
+                for i in 0..<columnCount {
+                    if !resolvedIndices.contains(i) {
+                        if intrinsicWidths[i] <= averageAllocation {
+                            // This column is small enough to keep its ideal size
+                            resolvedWidths[i] = intrinsicWidths[i]
+                            resolvedIndices.insert(i)
+                            remainingWidth -= intrinsicWidths[i]
+                            progressMade = true
+                        }
+                    }
+                }
+                
+                if !progressMade {
+                    // All remaining columns are larger than the average.
+                    // Distribute remaining space equally (or proportionally) among them.
+                    // Here we use equal distribution of the remainder as they are all "large"
+                    let finalAllocation = floor(remainingWidth / remainingCount)
+                    for i in 0..<columnCount {
+                        if !resolvedIndices.contains(i) {
+                            resolvedWidths[i] = max(minColumnWidth, finalAllocation)
+                        }
+                    }
+                    break
+                }
+            }
+            finalColWidths = resolvedWidths
+        } else if !hasEnoughSpace && !canCompressIdeally {
+            // Table has too many columns to fit on screen even at minimum widths.
+            // Fallback: We MUST scroll horizontally.
+            // Keep intrinsic widths so users can see full single-line content by scrolling.
+            finalColWidths = intrinsicWidths
+        }
+        
+        // 3. Calculate Heights (based on Final Widths)
         var rowHeights: [CGFloat] = []
         for (rowIndex, _) in allRows.enumerated() {
              let row = allRows[rowIndex]
              var maxHeight: CGFloat = 40
             
             for (colIndex, val) in row.enumerated() {
-                if colIndex < colWidths.count {
-                    let width = colWidths[colIndex]
-                    let textWidth = width - padding
-                    let height = val.boundingRect(
+                if colIndex < columnCount {
+                    let width = finalColWidths[colIndex]
+                    let textWidth = max(1, width - padding) // Ensure > 0
+                    
+                    let rect = val.boundingRect(
                         with: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude),
-                        options: .usesLineFragmentOrigin,
+                        options: [.usesLineFragmentOrigin, .usesFontLeading],
                         context: nil
-                    ).height + padding
+                    )
+                    let height = ceil(rect.height) + padding
                     maxHeight = max(maxHeight, height)
                 }
             }
             rowHeights.append(maxHeight)
         }
         
-        let totalWidth = colWidths.reduce(0, +)
+        let totalWidth = finalColWidths.reduce(0, +)
         let totalHeight = rowHeights.reduce(0, +)
         
-        return (totalWidth, totalHeight, colWidths, rowHeights)
+        return (totalWidth, totalHeight, finalColWidths, rowHeights)
     }
 }

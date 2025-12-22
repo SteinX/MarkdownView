@@ -163,7 +163,8 @@ struct MyMarkdownParser: MarkupWalker {
         let view = MarkdownTableView(
             headers: headers,
             rows: rows,
-            theme: theme
+            theme: theme,
+            maxLayoutWidth: maxLayoutWidth
         )
         
         view.frame = CGRect(origin: .zero, size: size)
