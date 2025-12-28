@@ -8,8 +8,10 @@ struct MarkdownTheme {
     let headingFonts: [UIFont]
     
     let textColor: UIColor
+    let quoteTextColor: UIColor
     let codeBackgroundColor: UIColor
     let codeTextColor: UIColor
+    let linkColor: UIColor
     let quoteBackgroundColor: UIColor
     let quoteBorderColor: UIColor
     let separatorColor: UIColor
@@ -39,8 +41,10 @@ struct MarkdownTheme {
             .systemFont(ofSize: 14, weight: .bold)
         ],
         textColor: .label,
+        quoteTextColor: .secondaryLabel,
         codeBackgroundColor: .secondarySystemBackground,
         codeTextColor: .label,
+        linkColor: .link,
         quoteBackgroundColor: .systemGray6,
         quoteBorderColor: .systemGray4,
         separatorColor: .separator,
@@ -54,4 +58,36 @@ struct MarkdownTheme {
         listMarkerSpacing: 24,
         bulletMarkers: ["•", "◦", "■"]
     )
+    
+    var quoted: MarkdownTheme {
+        var theme = self
+        // Create a 'muted' version of the theme
+        // We can use the existing init, but since it's a struct with let properties, we need to create a new instance.
+        // To make this easier, let's just return a new instance with overrides.
+        
+        return MarkdownTheme(
+            baseFont: baseFont,
+            codeFont: codeFont,
+            boldFont: boldFont,
+            italicFont: italicFont,
+            headingFonts: headingFonts,
+            textColor: quoteTextColor, // Main text becomes quote text
+            quoteTextColor: quoteTextColor,
+            codeBackgroundColor: UIColor(white: 0, alpha: 0.05), // Subtle styling for code inside quote
+            codeTextColor: quoteTextColor, // Code text matches quote text
+            linkColor: linkColor,
+            quoteBackgroundColor: quoteBackgroundColor, // Nested quotes?
+            quoteBorderColor: quoteBorderColor,
+            separatorColor: separatorColor,
+            tableBorderColor: tableBorderColor,
+            tableHeaderColor: tableHeaderColor,
+            codeHeaderColor: codeHeaderColor,
+            paragraphSpacing: paragraphSpacing,
+            headingSpacings: headingSpacings,
+            listSpacing: listSpacing,
+            listIndentStep: listIndentStep,
+            listMarkerSpacing: listMarkerSpacing,
+            bulletMarkers: bulletMarkers
+        )
+    }
 }

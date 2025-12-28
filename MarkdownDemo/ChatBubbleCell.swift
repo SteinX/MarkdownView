@@ -63,7 +63,9 @@ class ChatBubbleCell: UITableViewCell {
         } else {
             screenWidth = UIScreen.main.bounds.width
         }
-        let maxWidth = screenWidth - 32 - 24 // 32(Cell margin) + 24(Bubble padding)
+
+        // margins: Cell(32) + Bubble(24) + Safety(8) -> Reduce risk of overflow due to rounding
+        let maxWidth = screenWidth - 32 - 24 - 8
         
         var parser = MyMarkdownParser(theme: .default, maxLayoutWidth: maxWidth)
         let item = parser.parse(document)

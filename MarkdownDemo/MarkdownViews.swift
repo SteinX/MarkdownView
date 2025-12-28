@@ -62,37 +62,84 @@ class CodeBlockView: UIView {
 
 // MARK: - Quote View
 class QuoteView: UIView {
-    init(text: NSAttributedString, theme: MarkdownTheme) {
+    private let textView = AttachmentTextView()
+    private let border = UIView()
+    
+    init(attributedText: NSAttributedString, attachments: [Int: UIView], theme: MarkdownTheme) {
         super.init(frame: .zero)
+        setupUI(theme: theme)
+        configure(attributedText: attributedText, attachments: attachments)
+    }
+    
+    required init?(coder: NSCoder) { fatalError() }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+    }
+    
+    // Constraint to force specific width during layout calculation
+    private var widthConstraint: NSLayoutConstraint?
+
+    var preferredMaxLayoutWidth: CGFloat? {
+        didSet {
+            if let width = preferredMaxLayoutWidth {
+                // Calculate inner text view width: Total - (Border 4 + Left 12 + Right 8) = Total - 24
+                let innerWidth = width - 24
+                if widthConstraint == nil {
+                    widthConstraint = textView.widthAnchor.constraint(equalToConstant: innerWidth)
+                    widthConstraint?.isActive = true
+                } else {
+                    widthConstraint?.constant = innerWidth
+                }
+            } else {
+                widthConstraint?.isActive = false
+                widthConstraint = nil
+            }
+        }
+    }
+
+    private func setupUI(theme: MarkdownTheme) {
         self.translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = theme.quoteBackgroundColor
         layer.cornerRadius = 4
+        clipsToBounds = true 
         
-        let border = UIView()
+        // Border
         border.backgroundColor = theme.quoteBorderColor
         border.translatesAutoresizingMaskIntoConstraints = false
-        
-        let label = UILabel()
-        label.attributedText = text
-        label.numberOfLines = 0
-        label.translatesAutoresizingMaskIntoConstraints = false
-        
         addSubview(border)
-        addSubview(label)
+        
+        // TextView
+        textView.backgroundColor = .clear
+        textView.isEditable = false
+        textView.isScrollEnabled = false
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        // Keep low compression resistance just in case
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(textView)
         
         NSLayoutConstraint.activate([
+            // Border: Left side, full height, fixed width
             border.leadingAnchor.constraint(equalTo: leadingAnchor),
             border.topAnchor.constraint(equalTo: topAnchor),
             border.bottomAnchor.constraint(equalTo: bottomAnchor),
             border.widthAnchor.constraint(equalToConstant: 4),
             
-            label.leadingAnchor.constraint(equalTo: border.trailingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8)
+            // TextView: Right of border
+            textView.leadingAnchor.constraint(equalTo: border.trailingAnchor, constant: 12),
+            // We keep the trailing constraint, but the explicit width constraint (if set) will dominate
+            textView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            textView.topAnchor.constraint(equalTo: topAnchor, constant: 0),
+            textView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: 0)
         ])
     }
-    required init?(coder: NSCoder) { fatalError() }
+    
+    private func configure(attributedText: NSAttributedString, attachments: [Int: UIView]) {
+        textView.attributedText = attributedText
+        textView.attachmentViews = attachments
+    }
 }
 
 // MARK: - Table View

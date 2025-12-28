@@ -44,19 +44,21 @@ class ViewController: UIViewController, UITableViewDataSource {
 
     1. Item 1
     2. Item 2
-    3. Item 3
+    3. Item 3 dsdjskdjlksajdlksajdlksjdkaljdksldjskajdlasjdklsjdkajdlasjdaldjsdjsdjalkadjslkajdlkjsladj
         1. Item 3a
         2. Item 3b
+            > dsadsadsad dsadksadskadakdsa `dsadsad` dsadsdsadsadsadsad
         3. > dsadsadsad dsadksadskadakdsa `dsadsad` dsadsdsadsadsadsad
-            1. 2232131
-            2. dsadsad
+        4. text
+            5. 2232131
+            6. dsadsad
     
     ## Blockquotes
     
     > Markdown is a lightweight markup language with plain-text-formatting syntax, created in 2004 by John Gruber with Aaron Swartz.
     >
     >> Markdown is often used to format readme files, for writing messages in online discussion forums, and to create rich text using a plain text editor.
-    
+
     ## Code Block
     ```swift
     func hello() {
@@ -109,6 +111,91 @@ class ViewController: UIViewController, UITableViewDataSource {
     | Italic | Use `*text*` | This is *Italic* |
     | Code | Use `` `code` `` | `print("Hello")` |
     | Mixed | Complicated | **Bold** and *Italic* inside |
+
+    ## Complex Mixed Content
+
+    > ### Quote with List
+    > * **Bold Item** in a quote
+    > * _Italic Item_ with `inline code`
+    > * Nested list:
+    >   1. Ordered item 1
+    >   2. Ordered item 2 containing *mixed emphasis*
+    > * Return to unordered list
+
+    1. List item containing a quote:
+        > This is a quote inside a list item.
+        > It has multiple lines.
+        > And some **bold text**.
+    2. Another item with complex mixed content:
+        * Sub-item 1
+        * Sub-item 2 with `code`
+
+    ## Blocks in List/Quote
+
+    1. List with Code Block:
+        ```swift
+        let x = 10
+        print(x)
+        ```
+    2. List with Table:
+        | Col A | Col B |
+        | --- | --- |
+        | Val 1 | Val 2 |   
+
+    > Quote with Table:
+    > | Q-Col 1 | Q-Col 2 |
+    > | --- | --- |
+    > | Data A | Data B |
+    
+    ## New Inline Elements
+    
+    This is a [Link](https://apple.com) and this is ~strikethrough text~.
+    
+    ## Enhanced List Layout Investigations
+
+    1.  **Level 1 Item (Ordered)**
+        
+        This item contains a paragraph of text mixed with blocks.
+        
+        ```swift
+        // Code block at Level 1
+        print("Level 1 Code")
+        ```
+        
+        More text at Level 1 after the code block.
+
+        *   **Level 2 Item (Unordered)**
+            
+            This nested item also has mixed content.
+            
+            > Blockquote at Level 2.
+            > It spans multiple lines.
+            
+            And here is a table at Level 2:
+            
+            | L2 Header 1 | L2 Header 2 |
+            | :--- | :--- |
+            | Cell 1 | Cell 2 |
+            
+            1.  **Level 3 Item (Ordered)**
+                
+                Deeply nested item with a code block.
+                
+                ```python
+                # Code block at Level 3
+                def level_3():
+                    pass
+                ```
+                
+                Closing text for Level 3.
+
+        *   **Another Level 2 Item**
+            
+            Just some plain text here to verify spacing.
+
+    2.  **Level 1 Item (Cont)**
+        
+        Verifying multiple sibling items with complex content.
     """
 
     override func viewDidLoad() {

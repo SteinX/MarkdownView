@@ -12,10 +12,12 @@ struct MyMarkdownParser: MarkupWalker {
     private let theme: MarkdownTheme
     private let maxLayoutWidth: CGFloat
     private var listDepth = 0
+    private var currentTextColor: UIColor
     
     init(theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
+        self.currentTextColor = theme.textColor
     }
     
     mutating func parse(_ document: Document) -> MyMarkdownItem {
@@ -35,7 +37,7 @@ struct MyMarkdownParser: MarkupWalker {
         
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: theme.textColor,
+            .foregroundColor: currentTextColor, // Use currentTextColor to respect Quote theme
             .paragraphStyle: paragraphStyle
         ]
         
@@ -63,7 +65,7 @@ struct MyMarkdownParser: MarkupWalker {
     mutating func visitText(_ text: Text) {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: theme.baseFont,
-            .foregroundColor: theme.textColor
+            .foregroundColor: currentTextColor
         ]
         attributedString.append(NSAttributedString(string: text.string, attributes: attributes))
     }
@@ -96,20 +98,34 @@ struct MyMarkdownParser: MarkupWalker {
     
     private var listStack: [ListContext] = []
     
+    /// Tracks whether we are processing content that should be aligned with the text of the list item,
+    /// rather than the marker. This is true for subsequent paragraphs/blocks within a single list item.
+    private var shouldAlignToListContent = false
+    
     mutating func visitOrderedList(_ orderedList: OrderedList) {
+        let previousAlignState = shouldAlignToListContent
+        shouldAlignToListContent = false
+        
         listDepth += 1
         listStack.append(ListContext(type: .ordered, index: 1))
         descendInto(orderedList)
         listStack.removeLast()
         listDepth -= 1
+        
+        shouldAlignToListContent = previousAlignState
     }
     
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) {
+        let previousAlignState = shouldAlignToListContent
+        shouldAlignToListContent = false
+        
         listDepth += 1
         listStack.append(ListContext(type: .unordered, index: 0))
         descendInto(unorderedList)
         listStack.removeLast()
         listDepth -= 1
+        
+        shouldAlignToListContent = previousAlignState
     }
     
     mutating func visitListItem(_ listItem: ListItem) {
@@ -118,7 +134,7 @@ struct MyMarkdownParser: MarkupWalker {
         let style = currentParagraphStyle()
         let attributes: [NSAttributedString.Key: Any] = [
             .font: theme.baseFont,
-            .foregroundColor: theme.textColor,
+            .foregroundColor: currentTextColor,
             .paragraphStyle: style
         ]
         
@@ -140,9 +156,18 @@ struct MyMarkdownParser: MarkupWalker {
         attributedString.append(NSAttributedString(string: marker + "\t", attributes: attributes))
         
         // Content
-        // We do NOT apply style to the content range here. 
-        // We rely on visitParagraph (and others) using currentParagraphStyle() to match indentation.
-        descendInto(listItem)
+        // We manually iterate children to handle indentation for subsequent blocks.
+        let previousAlignState = shouldAlignToListContent
+        
+        for (index, child) in listItem.children.enumerated() {
+            // First child (index 0) shares the line with the marker, unless it's a block causing a newline immediately.
+            // But generally, the first child's paragraph style should allow the marker (at indent 0) to exist.
+            // Subsequent children (index > 0) MUST start at the textual indentation level.
+            shouldAlignToListContent = (index > 0)
+            visit(child)
+        }
+        
+        shouldAlignToListContent = previousAlignState
     }
     
     // MARK: - Helpers
@@ -160,7 +185,10 @@ struct MyMarkdownParser: MarkupWalker {
             // Text Indent matches the tab stop.
             let textIndent = markerIndent + theme.listMarkerSpacing
             
-            style.firstLineHeadIndent = markerIndent
+            // If we are deep in the list content (subsequent paragraphs),
+            // the first line should also start at the Text Indent.
+            // Otherwise (first paragraph), it starts at Marker Indent to accommodate the bullet.
+            style.firstLineHeadIndent = shouldAlignToListContent ? textIndent : markerIndent
             style.headIndent = textIndent
             style.paragraphSpacing = spacing ?? theme.listSpacing
             style.tabStops = [NSTextTab(textAlignment: .left, location: textIndent, options: [:])]
@@ -209,12 +237,22 @@ struct MyMarkdownParser: MarkupWalker {
 
     // MARK: - Complex Blocks (Attachments)
     
+    private var currentIndentationWidth: CGFloat {
+        guard listDepth > 0 else { return 0 }
+        let indentStep = theme.listIndentStep
+        let markerIndent = indentStep * CGFloat(listDepth - 1)
+        return markerIndent + theme.listMarkerSpacing
+    }
+    
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
         let code = codeBlock.code
         let view = CodeBlockView(code: code, theme: theme)
         
+        // Adjust width for indentation
+        let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+        
         let size = view.systemLayoutSizeFitting(
-            CGSize(width: maxLayoutWidth, height: UIView.layoutFittingExpandedSize.height),
+            CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         )
@@ -225,19 +263,54 @@ struct MyMarkdownParser: MarkupWalker {
     }
     
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
-        let text = blockQuote.myPlainText
-        let attrText = NSAttributedString(string: text, attributes: [.font: theme.italicFont, .foregroundColor: theme.textColor])
+        // 1. Recursive Parse for Content
+        // We reduce the max width to account for the border and padding of the QuoteView
+        // Border (4) + Padding Left (12) + Padding Right (8) = 24
+        let padding: CGFloat = 24
         
-        let view = QuoteView(text: attrText, theme: theme)
+        // Adjust available width for indentation AND internal padding
+        let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+        
+        let childTheme = theme.quoted
+        var childParser = MyMarkdownParser(theme: childTheme, maxLayoutWidth: availableWidth - padding)
+        
+        // BlockQuote children are usually paragraphs, lists, etc.
+        // We iterate and visit them with the child parser.
+        // Note: BlockQuote is a container, so we can't just `descendInto`.
+        // We need to parse its children as a separate document fragment or just visit them.
+        
+        for child in blockQuote.children {
+            childParser.visit(child)
+        }
+        
+        let attributedText = childParser.attributedString
+        let attachments = childParser.attachments
+        
+        // 2. Create Quote View
+        let view = QuoteView(attributedText: attributedText, attachments: attachments, theme: theme)
+        
+        // CRITICAL: Force explicit width constraint on the inner text view.
+        // This ensures text wraps correctly during systemLayoutSizeFitting.
+        view.preferredMaxLayoutWidth = availableWidth
+        
+        // Force layout pass with safe large height to prime the text container
+        view.frame = CGRect(x: 0, y: 0, width: availableWidth, height: 1000)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        
+        // 3. Layout
         let size = view.systemLayoutSizeFitting(
-            CGSize(width: maxLayoutWidth, height: UIView.layoutFittingExpandedSize.height),
+            CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         )
         
-        view.frame = CGRect(origin: .zero, size: size)
+        // Force width to availableWidth to ensure it fills the available horizontal space
+        let finalSize = CGSize(width: availableWidth, height: size.height)
+        
+        view.frame = CGRect(origin: .zero, size: finalSize)
         view.translatesAutoresizingMaskIntoConstraints = false
-        insertAttachment(view: view, size: size)
+        insertAttachment(view: view, size: finalSize)
     }
     
     mutating func visitTable(_ table: Table) {
@@ -260,12 +333,15 @@ struct MyMarkdownParser: MarkupWalker {
             return
         }
         
+        // Adjust width for indentation
+        let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+        
         // 2. Calculate Layout
         let size = MarkdownTableView.computedSize(
             headers: headers,
             rows: rows,
             theme: theme,
-            maxWidth: maxLayoutWidth
+            maxWidth: availableWidth
         )
         
         // 3. Create View
@@ -273,12 +349,40 @@ struct MyMarkdownParser: MarkupWalker {
             headers: headers,
             rows: rows,
             theme: theme,
-            maxLayoutWidth: maxLayoutWidth
+            maxLayoutWidth: availableWidth
         )
         
         view.frame = CGRect(origin: .zero, size: size)
         
         insertAttachment(view: view, size: size)
+    }
+    
+    mutating func visitInlineCode(_ inlineCode: InlineCode) {
+        let attributes: [NSAttributedString.Key: Any] = [
+             .font: theme.codeFont,
+             .backgroundColor: theme.codeBackgroundColor,
+             .foregroundColor: theme.codeTextColor
+        ]
+        attributedString.append(NSAttributedString(string: inlineCode.code, attributes: attributes))
+    }
+    
+    mutating func visitLink(_ link: Link) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: theme.linkColor,
+            .link: link.destination ?? ""
+        ]
+        let start = attributedString.length
+        descendInto(link)
+        attributedString.addAttributes(attributes, range: NSRange(location: start, length: attributedString.length - start))
+    }
+    
+    mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue
+        ]
+        let start = attributedString.length
+        descendInto(strikethrough)
+        attributedString.addAttributes(attributes, range: NSRange(location: start, length: attributedString.length - start))
     }
     
     // MARK: - Helper
@@ -293,6 +397,13 @@ struct MyMarkdownParser: MarkupWalker {
         
         // Use current indentation style for attachments too
         let paragraphStyle = currentParagraphStyle()
+        
+        // Fix: If inside a list, the attachment itself (which is a block) should align with the TEXT, not the MARKER.
+        // Standard currentParagraphStyle sets firstLineHeadIndent = Marker Position.
+        // We override this for the Attachment line to be headIndent (Text Position).
+        if listDepth > 0 {
+            paragraphStyle.firstLineHeadIndent = paragraphStyle.headIndent
+        }
         
         let attributes: [NSAttributedString.Key: Any] = [
             .paragraphStyle: paragraphStyle
@@ -351,6 +462,28 @@ struct InlineParser: MarkupWalker {
              .foregroundColor: theme.codeTextColor
         ]
         attributedString.append(NSAttributedString(string: inlineCode.code, attributes: attributes))
+    }
+    
+    mutating func visitLink(_ link: Link) {
+         let attributes: [NSAttributedString.Key: Any] = [
+             .foregroundColor: theme.linkColor,
+             // Note: NSTextView/UILabel might handle links differently, but usually .link is enough
+             // For static rendering in table we might just color it blue.
+             // If we want it clickable, the rendering Text View needs to support it.
+             // But for now, visual representation:
+         ]
+         let start = attributedString.length
+         descendInto(link)
+         attributedString.addAttributes(attributes, range: NSRange(location: start, length: attributedString.length - start))
+    }
+    
+    mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .strikethroughStyle: NSUnderlineStyle.single.rawValue
+        ]
+        let start = attributedString.length
+        descendInto(strikethrough)
+        attributedString.addAttributes(attributes, range: NSRange(location: start, length: attributedString.length - start))
     }
     
     mutating func defaultVisit(_ markup: Markup) {
