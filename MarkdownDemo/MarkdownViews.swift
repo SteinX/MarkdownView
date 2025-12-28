@@ -10,7 +10,6 @@ class CodeBlockView: UIView {
     init(code: String, theme: MarkdownTheme) {
         self.code = code
         super.init(frame: .zero)
-        self.translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = theme.codeBackgroundColor
         layer.cornerRadius = 6
         clipsToBounds = true
@@ -99,7 +98,6 @@ class QuoteView: UIView {
     }
 
     private func setupUI(theme: MarkdownTheme) {
-        self.translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = theme.quoteBackgroundColor
         layer.cornerRadius = 4
         clipsToBounds = true 

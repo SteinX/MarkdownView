@@ -247,6 +247,8 @@ struct MyMarkdownParser: MarkupWalker {
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
         let code = codeBlock.code
         let view = CodeBlockView(code: code, theme: theme)
+        // Helper: Use constraints for measurement
+        view.translatesAutoresizingMaskIntoConstraints = false
         
         // Adjust width for indentation
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
@@ -257,9 +259,13 @@ struct MyMarkdownParser: MarkupWalker {
             verticalFittingPriority: .fittingSizeLevel
         )
         
-        view.frame = CGRect(origin: .zero, size: size)
-        view.translatesAutoresizingMaskIntoConstraints = false
-        insertAttachment(view: view, size: size)
+        // Force width to availableWidth to ensure it fills the available horizontal space
+        let finalSize = CGSize(width: availableWidth, height: size.height)
+        
+        view.frame = CGRect(origin: .zero, size: finalSize)
+        // Restore for TextKit frame-based layout
+        view.translatesAutoresizingMaskIntoConstraints = true
+        insertAttachment(view: view, size: finalSize)
     }
     
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
@@ -288,6 +294,8 @@ struct MyMarkdownParser: MarkupWalker {
         
         // 2. Create Quote View
         let view = QuoteView(attributedText: attributedText, attachments: attachments, theme: theme)
+        // Helper: Use constraints for measurement
+        view.translatesAutoresizingMaskIntoConstraints = false
         
         // CRITICAL: Force explicit width constraint on the inner text view.
         // This ensures text wraps correctly during systemLayoutSizeFitting.
@@ -309,7 +317,8 @@ struct MyMarkdownParser: MarkupWalker {
         let finalSize = CGSize(width: availableWidth, height: size.height)
         
         view.frame = CGRect(origin: .zero, size: finalSize)
-        view.translatesAutoresizingMaskIntoConstraints = false
+        // Restore for TextKit frame-based layout
+        view.translatesAutoresizingMaskIntoConstraints = true
         insertAttachment(view: view, size: finalSize)
     }
     
