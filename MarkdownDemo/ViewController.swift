@@ -196,6 +196,64 @@ class ViewController: UIViewController, UITableViewDataSource {
     2.  **Level 1 Item (Cont)**
         
         Verifying multiple sibling items with complex content.
+
+    ## New Elements Verification
+
+    ### Thematic Break
+    Prior to break
+    
+    ***
+    
+    After break
+
+    ### Task Lists
+    - [ ] Pending Item
+    - [x] Completed Item
+    - [ ] Item with **Bold**
+    - [x] Item with `Code`
+
+    ### Images
+    
+    #### Block Image
+    ![Block Image](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90)
+
+    #### Inline Image
+    This is an inline image ![Inline](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90) in text.
+
+    #### Nested Images
+    
+    > Quote with Image (Should be dimmed):
+    > ![QuoteImg](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90)
+    
+    | Table | Image |
+    | :--- | :--- |
+    | Cell | ![TableImg](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90) |
+
+    #### List with Images
+    
+    *   Item 1
+    *   Item with inline Image: ![ListIcon](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90) inside content
+    *   Item 3
+
+    #### Block Images in Lists
+
+    1.  First item with block image below:
+        
+        ![BlockInList](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90)
+        
+    2.  Second item (no image)
+    
+    #### Multi-level Lists with Block Images
+    
+    1.  Level 1 Item
+        *   Level 2 with block image:
+            
+            ![L2Img](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90)
+            
+            1.  Level 3 Item
+                
+                ![L3Img](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90)
+    
     """
 
     override func viewDidLoad() {

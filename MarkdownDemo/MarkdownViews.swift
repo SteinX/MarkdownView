@@ -143,7 +143,7 @@ class QuoteView: UIView {
 // MARK: - Table View
 
 class MarkdownTableCell: UICollectionViewCell {
-    let label = UILabel()
+    let textView = AttachmentTextView()
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -153,30 +153,42 @@ class MarkdownTableCell: UICollectionViewCell {
     required init?(coder: NSCoder) { fatalError() }
     
     private func setupUI() {
-        label.numberOfLines = 0
-        label.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(label)
+        textView.isEditable = false
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(textView)
         
         contentView.layer.borderWidth = 0.5
         
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
-            label.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
-            label.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8)
+            textView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            textView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            textView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            textView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8)
         ])
     }
     
-    func configure(attributedText: NSAttributedString, theme: MarkdownTheme, isHeader: Bool) {
-        label.attributedText = attributedText
+    func configure(attributedText: NSAttributedString, attachments: [Int: UIView], theme: MarkdownTheme, isHeader: Bool) {
+        textView.attributedText = attributedText
+        textView.attachmentViews = attachments // AttachmentTextView logic handles this
+        
         contentView.backgroundColor = isHeader ? theme.tableHeaderColor : .clear
         contentView.layer.borderColor = theme.tableBorderColor.cgColor
+    }
+    
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        textView.cleanUp()
     }
 }
 
 class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
-    private let headers: [NSAttributedString]
-    private let rows: [[NSAttributedString]]
+    // Data now includes Attachments
+    private let headers: [(NSAttributedString, [Int: UIView])]
+    private let rows: [[(NSAttributedString, [Int: UIView])]]
     private let theme: MarkdownTheme
     private let maxLayoutWidth: CGFloat
     
@@ -188,7 +200,7 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
     private var rowHeights: [CGFloat] = []
     private var tableContentSize: CGSize = .zero
     
-    init(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
+    init(headers: [(NSAttributedString, [Int: UIView])], rows: [[(NSAttributedString, [Int: UIView])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
         self.headers = headers
         self.rows = rows
         self.theme = theme
@@ -205,7 +217,10 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
     required init?(coder: NSCoder) { fatalError() }
     
     private func calculateLayoutData() {
-        let (width, height, widths, heights) = MarkdownTableView.calculateLayout(headers: headers, rows: rows, theme: theme, maxWidth: maxLayoutWidth)
+        let headerTexts = headers.map { $0.0 }
+        let rowTexts = rows.map { row in row.map { $0.0 } }
+        
+        let (width, height, widths, heights) = MarkdownTableView.calculateLayout(headers: headerTexts, rows: rowTexts, theme: theme, maxWidth: maxLayoutWidth)
         self.tableContentSize = CGSize(width: width, height: height)
         self.columnWidths = widths
         self.rowHeights = heights
@@ -278,16 +293,21 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath) as! MarkdownTableCell
         
         let isHeader = indexPath.section == 0
-        let attributedText: NSAttributedString
+        let cellData: (NSAttributedString, [Int: UIView])
         
         if isHeader {
-            attributedText = headers[indexPath.item]
+            cellData = headers[indexPath.item]
         } else {
             let rowData = rows[indexPath.section - 1]
-            attributedText = indexPath.item < rowData.count ? rowData[indexPath.item] : NSAttributedString(string: "")
+            // Safe index check
+            if indexPath.item < rowData.count {
+                cellData = rowData[indexPath.item]
+            } else {
+                cellData = (NSAttributedString(string: ""), [:])
+            }
         }
         
-        cell.configure(attributedText: attributedText, theme: theme, isHeader: isHeader)
+        cell.configure(attributedText: cellData.0, attachments: cellData.1, theme: theme, isHeader: isHeader)
         return cell
     }
     
@@ -422,5 +442,98 @@ class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDel
         let totalHeight = rowHeights.reduce(0, +)
         
         return (totalWidth, totalHeight, finalColWidths, rowHeights)
+    }
+}
+
+// MARK: - Horizontal Rule View
+class HorizontalRuleView: UIView {
+    init(theme: MarkdownTheme, width: CGFloat) {
+        super.init(frame: .zero)
+        backgroundColor = theme.separatorColor
+        translatesAutoresizingMaskIntoConstraints = false
+        
+        let height: CGFloat = 1
+        let size = CGSize(width: width, height: height)
+        // Force layout size
+        self.frame = CGRect(origin: .zero, size: size)
+    }
+    
+    required init?(coder: NSCoder) { fatalError() }
+}
+
+// MARK: - Markdown Image View
+class MarkdownImageView: UIView {
+    private let imageView = UIImageView()
+    private let activityIndicator = UIActivityIndicatorView(style: .medium)
+    private let url: URL
+    private let imageHandler: MarkdownImageHandler
+    
+    // For "grayed out" effect in quotes
+    var isDimmed: Bool = false {
+        didSet {
+            updateDimmedState()
+        }
+    }
+    
+    init(url: URL, imageHandler: MarkdownImageHandler, theme: MarkdownTheme, isDimmed: Bool = false) {
+        self.url = url
+        self.imageHandler = imageHandler
+        self.isDimmed = isDimmed
+        super.init(frame: .zero)
+        
+        setupUI(theme: theme)
+        loadImage()
+        updateDimmedState()
+    }
+    
+    required init?(coder: NSCoder) { fatalError() }
+    
+    private func setupUI(theme: MarkdownTheme) {
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 4
+        imageView.backgroundColor = theme.imageBackgroundColor
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Default placeholder
+        imageView.image = theme.imageLoadingPlaceholder
+        imageView.tintColor = .systemGray4
+        
+        activityIndicator.hidesWhenStopped = true
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
+        
+        addSubview(imageView)
+        addSubview(activityIndicator)
+        
+        NSLayoutConstraint.activate([
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            
+            activityIndicator.centerXAnchor.constraint(equalTo: centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+    
+    private func updateDimmedState() {
+        if isDimmed {
+            imageView.alpha = 0.7
+        } else {
+            imageView.alpha = 1.0
+        }
+    }
+    
+    private func loadImage() {
+        activityIndicator.startAnimating()
+        imageHandler.loadImage(url: url, imageView: imageView) { [weak self] image in
+            guard let self = self else { return }
+            self.activityIndicator.stopAnimating()
+            
+            if let image = image {
+                self.imageView.image = image
+                self.imageView.contentMode = .scaleAspectFit
+            }
+        }
     }
 }

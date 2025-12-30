@@ -26,6 +26,12 @@ struct MarkdownTheme {
     let listIndentStep: CGFloat
     let listMarkerSpacing: CGFloat
     let bulletMarkers: [String]
+    let checkboxCheckedImage: UIImage?
+    let checkboxUncheckedImage: UIImage?
+    let checkboxColor: UIColor
+    let imageLoadingPlaceholder: UIImage?
+    let imageBackgroundColor: UIColor
+    let inlineImageSize: CGFloat // Height in points, width is calculated to maintain aspect ratio
     
     static let `default` = MarkdownTheme(
         baseFont: .systemFont(ofSize: 15),
@@ -56,27 +62,28 @@ struct MarkdownTheme {
         listSpacing: 4,
         listIndentStep: 20,
         listMarkerSpacing: 24,
-        bulletMarkers: ["•", "◦", "■"]
+        bulletMarkers: ["•", "◦", "■"],
+        checkboxCheckedImage: UIImage(systemName: "checkmark.square"),
+        checkboxUncheckedImage: UIImage(systemName: "square"),
+        checkboxColor: .link,
+        imageLoadingPlaceholder: UIImage(systemName: "photo"),
+        imageBackgroundColor: .clear,
+        inlineImageSize: 20
     )
     
     var quoted: MarkdownTheme {
-        var theme = self
-        // Create a 'muted' version of the theme
-        // We can use the existing init, but since it's a struct with let properties, we need to create a new instance.
-        // To make this easier, let's just return a new instance with overrides.
-        
         return MarkdownTheme(
             baseFont: baseFont,
             codeFont: codeFont,
             boldFont: boldFont,
             italicFont: italicFont,
             headingFonts: headingFonts,
-            textColor: quoteTextColor, // Main text becomes quote text
+            textColor: quoteTextColor,
             quoteTextColor: quoteTextColor,
-            codeBackgroundColor: UIColor(white: 0, alpha: 0.05), // Subtle styling for code inside quote
-            codeTextColor: quoteTextColor, // Code text matches quote text
+            codeBackgroundColor: UIColor(white: 0, alpha: 0.05),
+            codeTextColor: quoteTextColor,
             linkColor: linkColor,
-            quoteBackgroundColor: quoteBackgroundColor, // Nested quotes?
+            quoteBackgroundColor: quoteBackgroundColor,
             quoteBorderColor: quoteBorderColor,
             separatorColor: separatorColor,
             tableBorderColor: tableBorderColor,
@@ -87,7 +94,13 @@ struct MarkdownTheme {
             listSpacing: listSpacing,
             listIndentStep: listIndentStep,
             listMarkerSpacing: listMarkerSpacing,
-            bulletMarkers: bulletMarkers
+            bulletMarkers: bulletMarkers,
+            checkboxCheckedImage: checkboxCheckedImage,
+            checkboxUncheckedImage: checkboxUncheckedImage,
+            checkboxColor: checkboxColor,
+            imageLoadingPlaceholder: imageLoadingPlaceholder,
+            imageBackgroundColor: imageBackgroundColor,
+            inlineImageSize: inlineImageSize
         )
     }
 }

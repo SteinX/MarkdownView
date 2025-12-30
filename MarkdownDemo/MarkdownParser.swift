@@ -13,11 +13,15 @@ struct MyMarkdownParser: MarkupWalker {
     private let maxLayoutWidth: CGFloat
     private var listDepth = 0
     private var currentTextColor: UIColor
+    private let imageHandler: MarkdownImageHandler
+    private let isInsideQuote: Bool
     
-    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
+    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false) {
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
         self.currentTextColor = theme.textColor
+        self.imageHandler = imageHandler
+        self.isInsideQuote = isInsideQuote
     }
     
     mutating func parse(_ document: Document) -> MyMarkdownItem {
@@ -46,6 +50,12 @@ struct MyMarkdownParser: MarkupWalker {
     }
     
     mutating func visitParagraph(_ paragraph: Paragraph) {
+        // DETECT: Image-only paragraph (treat as Block Image)
+        if paragraph.childCount == 1, let image = paragraph.child(at: 0) as? Image {
+             visitImage(image, asBlock: true)
+             return
+        }
+        
         let start = attributedString.length
         descendInto(paragraph)
         let length = attributedString.length - start
@@ -142,18 +152,52 @@ struct MyMarkdownParser: MarkupWalker {
         let marker: String
         switch context.type {
         case .ordered:
-            marker = getOrderedMarker(depth: listDepth, index: context.index)
+             if let checkbox = listItem.checkbox {
+                 marker = getCheckboxMarker(checkbox)
+             } else {
+                marker = getOrderedMarker(depth: listDepth, index: context.index)
+             }
             // Increment index for next item
             if let lastIndex = listStack.indices.last {
                 listStack[lastIndex].index += 1
             }
         case .unordered:
-            let bullets = theme.bulletMarkers
-            let bulletIndex = max(0, listDepth - 1) % bullets.count
-            marker = bullets[bulletIndex]
+            if let checkbox = listItem.checkbox {
+                 marker = getCheckboxMarker(checkbox)
+            } else {
+                let bullets = theme.bulletMarkers
+                let bulletIndex = max(0, listDepth - 1) % bullets.count
+                marker = bullets[bulletIndex]
+            }
         }
         
-        attributedString.append(NSAttributedString(string: marker + "\t", attributes: attributes))
+        if let checkbox = listItem.checkbox {
+            // Render Checkbox Image
+            let image = checkbox == .checked ? (theme.checkboxCheckedImage ?? UIImage()) : (theme.checkboxUncheckedImage ?? UIImage())
+            let tintColor = theme.checkboxColor
+            
+            let attachment = NSTextAttachment()
+            attachment.image = image.withTintColor(tintColor, renderingMode: .alwaysTemplate)
+            
+            // Alignment strategy:
+            // Center the checkbox between font's ascender and descender
+            // This creates visual centering with the full line height
+            let font = theme.baseFont
+            let checkboxSize = font.pointSize
+            // (ascender + descender) gives the "visual center" of the line relative to baseline
+            // We offset by half the checkbox size to center it
+            let yOffset = (font.ascender + font.descender - checkboxSize) / 2.0
+            attachment.bounds = CGRect(x: 0, y: yOffset, width: checkboxSize, height: checkboxSize)
+            
+            let attrStr = NSMutableAttributedString(attachment: attachment)
+            attrStr.addAttributes(attributes, range: NSRange(location: 0, length: attrStr.length))
+            attributedString.append(attrStr)
+            
+            attributedString.append(NSAttributedString(string: "\t", attributes: attributes))
+        } else {
+            // Text Marker
+            attributedString.append(NSAttributedString(string: marker + "\t", attributes: attributes))
+        }
         
         // Content
         // We manually iterate children to handle indentation for subsequent blocks.
@@ -235,7 +279,60 @@ struct MyMarkdownParser: MarkupWalker {
         return result
     }
 
+    
+    private func getCheckboxMarker(_ checkbox: Checkbox) -> String {
+        // We will render the checkbox as an image attachment in the attributed string?
+        // Wait, 'marker' is currently a String appended to the attributed string.
+        // The current implementation appends `marker + "\t"`.
+        // We can return a specific Unicode character or substitute it with an image attachment later?
+        // To be safe and compatible with the current loop, let's use a placeholder string,
+        // OR better: we can change the logic in visitListItem to handle attributed markers.
+        // But for simplicity/robustness:
+        // Use a unicode char if available? 
+        // ☑ (U+2611) / ☐ (U+2610)
+        // But we want to use the Custom Images from Theme.
+        
+        // Actually, since this function returns String, we can't return an image here.
+        // We need to modify visitListItem logic to allow non-string markers.
+        // However, for this step, let's return a special UUID/Key or just handle it inside visitListItem.
+        return "" // Handled inside visitListItem
+    }
+
     // MARK: - Complex Blocks (Attachments)
+    
+    mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
+        let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+        let view = HorizontalRuleView(theme: theme, width: availableWidth)
+        insertAttachment(view: view, size: view.frame.size, isBlock: true)
+    }
+    
+    mutating func visitImage(_ image: Image) {
+        visitImage(image, asBlock: false)
+    }
+    
+    mutating func visitImage(_ image: Image, asBlock: Bool) {
+        guard let source = image.source, let url = URL(string: source) else { return }
+        
+        let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+        
+        // Size Estimation
+        let size: CGSize
+        if asBlock {
+             // Block Image: Full width, guessed height (e.g. 16:9)
+             let height = availableWidth * 0.5625
+             size = CGSize(width: availableWidth, height: height)
+        } else {
+             // Inline Image: use parameterized size from theme
+             let side = theme.inlineImageSize
+             size = CGSize(width: side, height: side)
+        }
+        
+        let view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        // Ensure frame is set
+        view.frame = CGRect(origin: .zero, size: size)
+        
+        insertAttachment(view: view, size: size, isBlock: asBlock)
+    }
     
     private var currentIndentationWidth: CGFloat {
         guard listDepth > 0 else { return 0 }
@@ -265,7 +362,7 @@ struct MyMarkdownParser: MarkupWalker {
         view.frame = CGRect(origin: .zero, size: finalSize)
         // Restore for TextKit frame-based layout
         view.translatesAutoresizingMaskIntoConstraints = true
-        insertAttachment(view: view, size: finalSize)
+        insertAttachment(view: view, size: finalSize, isBlock: true)
     }
     
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
@@ -278,7 +375,7 @@ struct MyMarkdownParser: MarkupWalker {
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
         
         let childTheme = theme.quoted
-        var childParser = MyMarkdownParser(theme: childTheme, maxLayoutWidth: availableWidth - padding)
+        var childParser = MyMarkdownParser(theme: childTheme, maxLayoutWidth: availableWidth - padding, imageHandler: imageHandler, isInsideQuote: true)
         
         // BlockQuote children are usually paragraphs, lists, etc.
         // We iterate and visit them with the child parser.
@@ -319,26 +416,38 @@ struct MyMarkdownParser: MarkupWalker {
         view.frame = CGRect(origin: .zero, size: finalSize)
         // Restore for TextKit frame-based layout
         view.translatesAutoresizingMaskIntoConstraints = true
-        insertAttachment(view: view, size: finalSize)
+        insertAttachment(view: view, size: finalSize, isBlock: true)
     }
     
     mutating func visitTable(_ table: Table) {
         // 1. Extract Data
-        let headers: [NSAttributedString] = table.head.cells.map { cell in
-             var parser = InlineParser(theme: theme, baseFont: theme.boldFont)
+        
+        // Helper to run InlineParser and get (String, Attachments)
+        func parseCell(_ cell: Markup) -> (NSAttributedString, [Int: UIView]) {
+             var parser = InlineParser(theme: theme, baseFont: theme.baseFont, imageHandler: imageHandler, isInsideQuote: isInsideQuote)
              parser.visit(cell)
-             return parser.attributedString
+             return (parser.attributedString, parser.attachments)
         }
         
-        let rows: [[NSAttributedString]] = table.body.rows.map { row in
-            row.cells.map { cell in
-                var parser = InlineParser(theme: theme, baseFont: theme.baseFont)
-                parser.visit(cell)
-                return parser.attributedString
+        // Header
+        var headerItems: [(NSAttributedString, [Int: UIView])] = []
+        for cell in table.head.cells {
+             var parser = InlineParser(theme: theme, baseFont: theme.boldFont, imageHandler: imageHandler, isInsideQuote: isInsideQuote)
+             parser.visit(cell)
+             headerItems.append((parser.attributedString, parser.attachments))
+        }
+        
+        // Body
+        var rowItems: [[(NSAttributedString, [Int: UIView])]] = []
+        for row in table.body.rows {
+            var items: [(NSAttributedString, [Int: UIView])] = []
+            for cell in row.cells {
+                items.append(parseCell(cell))
             }
+            rowItems.append(items)
         }
 
-        guard !headers.isEmpty else {
+        guard !headerItems.isEmpty else {
             return
         }
         
@@ -346,24 +455,31 @@ struct MyMarkdownParser: MarkupWalker {
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
         
         // 2. Calculate Layout
+        // We only care about text for layout sizing usually, but if there's an image attachment, 
+        // the NSAttributedString has a placeholder character with the attachment bounds.
+        // MarkdownTableView.computedSize uses boundingRect, which respects attachment bounds.
+        
+        let headerTexts = headerItems.map { $0.0 }
+        let rowTexts = rowItems.map { row in row.map { $0.0 } }
+        
         let size = MarkdownTableView.computedSize(
-            headers: headers,
-            rows: rows,
+            headers: headerTexts,
+            rows: rowTexts,
             theme: theme,
             maxWidth: availableWidth
         )
         
         // 3. Create View
         let view = MarkdownTableView(
-            headers: headers,
-            rows: rows,
+            headers: headerItems,
+            rows: rowItems,
             theme: theme,
             maxLayoutWidth: availableWidth
         )
         
         view.frame = CGRect(origin: .zero, size: size)
         
-        insertAttachment(view: view, size: size)
+        insertAttachment(view: view, size: size, isBlock: true)
     }
     
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
@@ -396,7 +512,7 @@ struct MyMarkdownParser: MarkupWalker {
     
     // MARK: - Helper
     
-    private mutating func insertAttachment(view: UIView, size: CGSize) {
+    private mutating func insertAttachment(view: UIView, size: CGSize, isBlock: Bool) {
         let renderer = UIGraphicsImageRenderer(size: size)
         let image = renderer.image { _ in }
         
@@ -424,7 +540,9 @@ struct MyMarkdownParser: MarkupWalker {
         
         attachments[location] = view
         
-        attributedString.append(NSAttributedString(string: "\n", attributes: attributes))
+        if isBlock {
+            attributedString.append(NSAttributedString(string: "\n", attributes: attributes))
+        }
     }
 }
 
@@ -434,12 +552,23 @@ struct MyMarkdownParser: MarkupWalker {
 
 struct InlineParser: MarkupWalker {
     var attributedString = NSMutableAttributedString()
+    var attachments: [Int: UIView] = [:]
+    
     let theme: MarkdownTheme
     let baseFont: UIFont
+    let imageHandler: MarkdownImageHandler
+    let isInsideQuote: Bool
     
-    init(theme: MarkdownTheme, baseFont: UIFont) {
+    // Default imageHandler if initialized without one? But we should pass it.
+    // We add an init that is compatible or update calls.
+    // The previous init didn't take handler. We need to update existing calls (if any outside visitTable).
+    // Luckily InlineParser is private/internal mostly.
+    
+    init(theme: MarkdownTheme, baseFont: UIFont, imageHandler: MarkdownImageHandler? = nil, isInsideQuote: Bool = false) {
         self.theme = theme
         self.baseFont = baseFont
+        self.imageHandler = imageHandler ?? DefaultImageHandler()
+        self.isInsideQuote = isInsideQuote
     }
     
     mutating func visitText(_ text: Text) {
@@ -448,6 +577,38 @@ struct InlineParser: MarkupWalker {
             .foregroundColor: theme.textColor
         ]
         attributedString.append(NSAttributedString(string: text.string, attributes: attributes))
+    }
+    
+    mutating func visitImage(_ image: Image) {
+        guard let source = image.source, let url = URL(string: source) else { return }
+        
+        // Inline Image - use parameterized size from theme
+        let side = theme.inlineImageSize
+        let size = CGSize(width: side, height: side)
+        
+        let view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        view.frame = CGRect(origin: .zero, size: size)
+        
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let placeholderImage = renderer.image { _ in }
+        
+        let attachment = NSTextAttachment()
+        attachment.image = placeholderImage
+        attachment.bounds = CGRect(origin: .zero, size: size)
+        
+        let location = attributedString.length
+        let attrAttachment = NSMutableAttributedString(attachment: attachment)
+        
+        // Apply styling to ensure layout (line height) is calculated consistently with text
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: baseFont,
+            .foregroundColor: theme.textColor
+        ]
+        attrAttachment.addAttributes(attributes, range: NSRange(location: 0, length: 1))
+        
+        attributedString.append(attrAttachment)
+        
+        attachments[location] = view
     }
     
     mutating func visitStrong(_ strong: Strong) {
