@@ -343,7 +343,8 @@ struct MyMarkdownParser: MarkupWalker {
     
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
         let code = codeBlock.code
-        let view = CodeBlockView(code: code, theme: theme)
+        let language = codeBlock.language
+        let view = CodeBlockView(code: code, language: language, theme: theme)
         // Helper: Use constraints for measurement
         view.translatesAutoresizingMaskIntoConstraints = false
         
@@ -352,8 +353,8 @@ struct MyMarkdownParser: MarkupWalker {
         
         let size = view.systemLayoutSizeFitting(
             CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
+            withHorizontalFittingPriority: UILayoutPriority.required,
+            verticalFittingPriority: UILayoutPriority.fittingSizeLevel
         )
         
         // Force width to availableWidth to ensure it fills the available horizontal space

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		9AC0C2BB2EF717E500390CE2 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 9AC0C2BA2EF717E500390CE2 /* Markdown */; };
+		9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */,
 				9AC0C2BB2EF717E500390CE2 /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -84,6 +86,7 @@
 			name = MarkdownDemo;
 			packageProductDependencies = (
 				9AC0C2BA2EF717E500390CE2 /* Markdown */,
+				9AE25AB12F04BDE400E3DD5B /* Highlightr */,
 			);
 			productName = MarkdownDemo;
 			productReference = 9AC0C2972EF70E5100390CE2 /* MarkdownDemo.app */;
@@ -115,6 +118,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				9AC0C2B92EF717E500390CE2 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9AC0C2982EF70E5100390CE2 /* Products */;
@@ -360,6 +364,14 @@
 				minimumVersion = 0.7.3;
 			};
 		};
+		9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/raspu/Highlightr.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.3.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -367,6 +379,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9AC0C2B92EF717E500390CE2 /* XCRemoteSwiftPackageReference "swift-markdown" */;
 			productName = Markdown;
+		};
+		9AE25AB12F04BDE400E3DD5B /* Highlightr */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */;
+			productName = Highlightr;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

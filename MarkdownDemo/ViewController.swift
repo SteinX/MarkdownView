@@ -65,6 +65,25 @@ class ViewController: UIViewController, UITableViewDataSource {
         print("Hello World")
     }
     ```
+
+    ## Long & Complex Code Block
+    ```rust
+    // A more complex example to test highlighting and wrapping
+    #[derive(Debug)]
+    struct Point {
+        x: i32,
+        y: i32,
+    }
+
+    fn main() {
+        let p = Point { x: 10, y: 20 };
+        println!("Point is: {:?}", p);
+        
+        let scores = vec![10, 20, 30, 40, 50];
+        let sum: i32 = scores.iter().filter(|&&x| x > 20).sum();
+        println!("Sum of scores > 20: {}", sum);
+    }
+    ```
     
     ## Large Table
     | ID | Name | Role | Department | Location | Status | Project | Date | Hours | Notes |
@@ -254,6 +273,38 @@ class ViewController: UIViewController, UITableViewDataSource {
                 
                 ![L3Img](https://images.ctfassets.net/8aevphvgewt8/36rqLbFzJsdRRFHNM4TXIU/afdb59a69ee38661aed3e66f73970ce2/github-copilot-agent-mode.png?w=1440&fm=webp&q=90)
     
+    ## JSON Content
+    ```json
+    {
+      "name": "MarkdownDemo",
+      "version": "1.0.0",
+      "settings": {
+        "theme": "dark",
+        "notifications": true,
+        "retry_count": 3
+      },
+      "features": [
+        "syntax_highlighting",
+        "tables",
+        "images"
+      ]
+    }
+    ```
+
+    ## SQL Query
+    ```sql
+    SELECT 
+        u.id, 
+        u.username, 
+        COUNT(o.id) as order_count 
+    FROM users u
+    LEFT JOIN orders o ON u.id = o.user_id
+    WHERE u.active = true
+      AND o.created_at >= '2023-01-01'
+    GROUP BY u.id
+    HAVING order_count > 5
+    ORDER BY order_count DESC;
+    ```
     """
 
     override func viewDidLoad() {

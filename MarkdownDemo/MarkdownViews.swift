@@ -1,14 +1,22 @@
 import UIKit
+#if canImport(Highlightr)
+import Highlightr
+#endif
 
+// MARK: - Code Block View
 // MARK: - Code Block View
 class CodeBlockView: UIView {
     private let headerView = UIView()
+    private let languageLabel = UILabel()
+    private let scrollView = UIScrollView() // Container for content
     private let label = UILabel()
     private let copyButton = UIButton(type: .system)
     private let code: String
+    private let language: String?
     
-    init(code: String, theme: MarkdownTheme) {
+    init(code: String, language: String?, theme: MarkdownTheme) {
         self.code = code
+        self.language = language
         super.init(frame: .zero)
         backgroundColor = theme.codeBackgroundColor
         layer.cornerRadius = 6
@@ -18,37 +26,81 @@ class CodeBlockView: UIView {
         headerView.backgroundColor = theme.codeHeaderColor
         headerView.translatesAutoresizingMaskIntoConstraints = false
         
-        label.text = code
-        label.font = theme.codeFont
-        label.textColor = theme.codeTextColor
+        // Language Label
+        languageLabel.font = theme.codeLanguageLabelFont
+        languageLabel.textColor = theme.codeLanguageLabelColor
+        if let lang = language, !lang.isEmpty {
+            languageLabel.text = Self.formatLanguageName(lang)
+        }
+        languageLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        // ScrollView & Label
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.backgroundColor = .clear
+        // Only allow scrolling direction based on content, but generally we want horizontal for code
+        scrollView.showsHorizontalScrollIndicator = true
+        scrollView.showsVerticalScrollIndicator = false
+        
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
+        configureCodeLabel(code: code, language: language, theme: theme)
         
+        // Copy Button (Resized to 20x20 visual, touch area stays same or use padding)
         copyButton.setImage(UIImage(systemName: "doc.on.doc"), for: .normal)
         copyButton.tintColor = .systemGray
         copyButton.addTarget(self, action: #selector(copyCode), for: .touchUpInside)
         copyButton.translatesAutoresizingMaskIntoConstraints = false
         
         addSubview(headerView)
+        headerView.addSubview(languageLabel)
         headerView.addSubview(copyButton)
-        addSubview(label)
         
+        addSubview(scrollView)
+        scrollView.addSubview(label)
+        
+        // Basic Constraints
         NSLayoutConstraint.activate([
             headerView.topAnchor.constraint(equalTo: topAnchor),
             headerView.leadingAnchor.constraint(equalTo: leadingAnchor),
             headerView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headerView.heightAnchor.constraint(equalToConstant: 38),
+            headerView.heightAnchor.constraint(equalToConstant: 34), // Slightly shorter header for compact look
             
+            languageLabel.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
+            languageLabel.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 12),
+            languageLabel.trailingAnchor.constraint(lessThanOrEqualTo: copyButton.leadingAnchor, constant: -8),
+            
+            // Smaller copy button
             copyButton.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
             copyButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -8),
-            copyButton.widthAnchor.constraint(equalToConstant: 30),
-            copyButton.heightAnchor.constraint(equalToConstant: 30),
+            copyButton.widthAnchor.constraint(equalToConstant: 20),
+            copyButton.heightAnchor.constraint(equalToConstant: 20),
             
-            label.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: 12),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12)
+            // ScrollView fills available space below header
+            scrollView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            
+            // Label inside ScrollView
+            label.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 12),
+            label.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -12),
+            label.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -12),
+            
+            // Fit Frame height to Content height (disable vertical scrolling, force view expansion)
+             label.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor, constant: -24)
         ])
+        
+        // Scrollable Logic
+        if theme.codeBlockScrollable {
+            // Horizontal scroll enabled: Label width is NOT constrained to view width
+            // Allowing label to expand naturally horizontally
+        } else {
+            // Wrapping enabled: Label width constrained to ScrollView frame width (minus padding)
+             let widthConstraint = label.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -24)
+             widthConstraint.priority = .required
+             widthConstraint.isActive = true
+        }
     }
     
     required init?(coder: NSCoder) { fatalError() }
@@ -56,6 +108,77 @@ class CodeBlockView: UIView {
     @objc private func copyCode() {
         UIPasteboard.general.string = code
         // Feedback animation could be added here
+    }
+    
+    private func configureCodeLabel(code: String, language: String?, theme: MarkdownTheme) {
+        // Try Highlightr if language is specified
+        if let lang = language, !lang.isEmpty {
+            if let highlightedCode = Self.highlightCode(code, language: lang, themeName: theme.syntaxHighlightTheme.rawValue, codeFont: theme.codeFont) {
+                label.attributedText = highlightedCode
+                return
+            }
+        }
+        
+        // Fallback to plain text
+        label.text = code
+        label.font = theme.codeFont
+        label.textColor = theme.codeTextColor
+    }
+    
+    /// Format language identifiers into readable names (e.g., "javascript" → "JavaScript")
+    private static func formatLanguageName(_ language: String) -> String {
+        let lower = language.lowercased()
+        
+        // 1. Common acronyms that should be all-caps
+        let acronyms: Set<String> = ["html", "css", "sql", "php", "json", "xml", "yaml", "yml", "bash", "sh", "cpp"]
+        if acronyms.contains(lower) {
+            if lower == "cpp" { return "C++" }
+            return lower.uppercased()
+        }
+        
+        // 2. Special mappings for specific styling
+        let specialMappings: [String: String] = [
+            "js": "JavaScript",
+            "javascript": "JavaScript",
+            "ts": "TypeScript",
+            "typescript": "TypeScript",
+            "cs": "C#",
+            "csharp": "C#",
+            "objc": "Objective-C",
+            "objectivec": "Objective-C",
+            "vb": "Visual Basic"
+        ]
+        
+        if let mapped = specialMappings[lower] {
+            return mapped
+        }
+        
+        // 3. Generic fallback: Capitalized (e.g., "python" -> "Python", "swift" -> "Swift")
+        return language.capitalized
+    }
+    
+    /// Highlight code using Highlightr library
+    /// Returns nil if Highlightr is not available or highlighting fails
+    private static func highlightCode(_ code: String, language: String, themeName: String, codeFont: UIFont) -> NSAttributedString? {
+        #if canImport(Highlightr)
+        // print("DEBUG: Highlightr is available. Language: \(language)")
+        guard let highlightr = Highlightr() else {
+             print("MarkdownDemo Error: Failed to initialize Highlightr")
+             return nil
+        }
+        highlightr.setTheme(to: themeName)
+        highlightr.theme.codeFont = codeFont
+        
+        if let result = highlightr.highlight(code, as: language, fastRender: true) {
+             return result
+        } else {
+             print("MarkdownDemo Error: Highlightr failed to highlight code for language: \(language)")
+             return nil
+        }
+        #else
+        print("MarkdownDemo Warning: Highlightr module is NOT imported. Syntax highlighting is disabled.")
+        return nil
+        #endif
     }
 }
 

@@ -18,6 +18,68 @@ struct MarkdownTheme {
     let tableBorderColor: UIColor
     let tableHeaderColor: UIColor
     let codeHeaderColor: UIColor
+    enum SyntaxHighlightTheme: String {
+        case agate = "agate"
+        case androidstudio = "androidstudio"
+        case arduinoLight = "arduino-light"
+        case arta = "arta"
+        case ascetic = "ascetic"
+        case atomOneDark = "atom-one-dark"
+        case atomOneLight = "atom-one-light"
+        case codepenEmbed = "codepen-embed"
+        case colorBrewer = "color-brewer"
+        case dark = "dark"
+        case darkula = "darkula"
+        case docco = "docco"
+        case dracula = "dracula"
+        case far = "far"
+        case foundation = "foundation"
+        case github = "github"
+        case githubGist = "github-gist"
+        case googlecode = "googlecode"
+        case grayscale = "grayscale"
+        case gruvboxDark = "gruvbox-dark"
+        case gruvboxLight = "gruvbox-light"
+        case hopscotch = "hopscotch"
+        case hybrid = "hybrid"
+        case idea = "idea"
+        case irBlack = "ir-black"
+        case kimbieDark = "kimbie.dark"
+        case kimbieLight = "kimbie.light"
+        case magula = "magula"
+        case monoBlue = "mono-blue"
+        case monokai = "monokai"
+        case monokaiSublime = "monokai-sublime"
+        case obsidian = "obsidian"
+        case ocean = "ocean"
+        case paraisoDark = "paraiso.dark"
+        case paraisoLight = "paraiso.light"
+        case purebasic = "purebasic"
+        case qtcreatorDark = "qtcreator_dark"
+        case qtcreatorLight = "qtcreator_light"
+        case railscasts = "railscasts"
+        case rainbow = "rainbow"
+        case routeros = "routeros"
+        case schoolBook = "school-book"
+        case solarizedDark = "solarized-dark"
+        case solarizedLight = "solarized-light"
+        case sunburst = "sunburst"
+        case tomorrow = "tomorrow"
+        case tomorrowNight = "tomorrow-night"
+        case tomorrowNightBlue = "tomorrow-night-blue"
+        case tomorrowNightBright = "tomorrow-night-bright"
+        case tomorrowNightEighties = "tomorrow-night-eighties"
+        case vs = "vs"
+        case vs2015 = "vs2015"
+        case xcode = "xcode"
+        case xt256 = "xt256"
+        case zenburn = "zenburn"
+    }
+    
+    let codeLanguageLabelFont: UIFont
+    let codeLanguageLabelColor: UIColor
+    let syntaxHighlightTheme: SyntaxHighlightTheme
+    let codeBlockScrollable: Bool
     
     // Spacing
     let paragraphSpacing: CGFloat
@@ -57,6 +119,10 @@ struct MarkdownTheme {
         tableBorderColor: .systemGray4,
         tableHeaderColor: .systemGray5,
         codeHeaderColor: .systemGray5,
+        codeLanguageLabelFont: .systemFont(ofSize: 12, weight: .medium),
+        codeLanguageLabelColor: .secondaryLabel,
+        syntaxHighlightTheme: .atomOneDark,
+        codeBlockScrollable: false,
         paragraphSpacing: 12,
         headingSpacings: [16, 12, 10, 8, 8, 8],
         listSpacing: 4,
@@ -89,6 +155,10 @@ struct MarkdownTheme {
             tableBorderColor: tableBorderColor,
             tableHeaderColor: tableHeaderColor,
             codeHeaderColor: codeHeaderColor,
+            codeLanguageLabelFont: codeLanguageLabelFont,
+            codeLanguageLabelColor: codeLanguageLabelColor,
+            syntaxHighlightTheme: syntaxHighlightTheme,
+            codeBlockScrollable: codeBlockScrollable,
             paragraphSpacing: paragraphSpacing,
             headingSpacings: headingSpacings,
             listSpacing: listSpacing,
