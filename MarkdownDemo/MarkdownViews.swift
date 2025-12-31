@@ -233,6 +233,7 @@ class QuoteView: UIView {
         // TextView
         textView.backgroundColor = .clear
         textView.isEditable = false
+        textView.isSelectable = true
         textView.isScrollEnabled = false
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0

@@ -317,7 +317,12 @@ class ViewController: UIViewController, UITableViewDataSource {
         tableView.separatorStyle = .none
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 200
+        tableView.allowsSelection = false
+        tableView.delaysContentTouches = false
         view.addSubview(tableView)
+
+
+
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {

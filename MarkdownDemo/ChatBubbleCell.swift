@@ -22,17 +22,21 @@ class ChatBubbleCell: UITableViewCell {
         bubbleView.layer.cornerRadius = 12
         bubbleView.layer.borderWidth = 1
         bubbleView.layer.borderColor = UIColor.systemGray5.cgColor
+        bubbleView.clipsToBounds = false
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubbleView)
         
         // TextView Configuration
         markdownTextView.isEditable = false
-        markdownTextView.isScrollEnabled = false // Critical: let Cell expand height
+        markdownTextView.isSelectable = true
+        markdownTextView.isScrollEnabled = false
         markdownTextView.backgroundColor = .clear
         markdownTextView.textContainerInset = .zero
         markdownTextView.textContainer.lineFragmentPadding = 0
         markdownTextView.translatesAutoresizingMaskIntoConstraints = false
+
         bubbleView.addSubview(markdownTextView)
+
         
         NSLayoutConstraint.activate([
             bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),

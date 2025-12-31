@@ -74,6 +74,7 @@ struct MyMarkdownParser: MarkupWalker {
     
     mutating func visitText(_ text: Text) {
         let attributes: [NSAttributedString.Key: Any] = [
+
             .font: theme.baseFont,
             .foregroundColor: currentTextColor
         ]
@@ -415,9 +416,12 @@ struct MyMarkdownParser: MarkupWalker {
         let finalSize = CGSize(width: availableWidth, height: size.height)
         
         view.frame = CGRect(origin: .zero, size: finalSize)
+        // Clear the width constraint before switching to frame-based layout
+        view.preferredMaxLayoutWidth = nil
         // Restore for TextKit frame-based layout
         view.translatesAutoresizingMaskIntoConstraints = true
         insertAttachment(view: view, size: finalSize, isBlock: true)
+
     }
     
     mutating func visitTable(_ table: Table) {

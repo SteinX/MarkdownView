@@ -2,12 +2,31 @@ import UIKit
 
 class AttachmentTextView: UITextView {
     
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        setup()
+    }
+    
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setup()
+    }
+    
+    private func setup() {
+        isSelectable = true
+        tintColor = .systemBlue
+        clipsToBounds = false
+        layoutManager.allowsNonContiguousLayout = false
+    }
+    
     var attachmentViews: [Int: UIView] = [:] {
         didSet {
             // Remove old views
             oldValue.values.forEach { $0.removeFromSuperview() }
-            // Add new views
-            attachmentViews.values.forEach { addSubview($0) }
+            // Add new views at the bottom of z-order so selection layer stays on top
+            attachmentViews.values.forEach { view in
+                insertSubview(view, at: 0)
+            }
         }
     }
     
@@ -40,9 +59,6 @@ class AttachmentTextView: UITextView {
                 view.setNeedsLayout()
                 view.layoutIfNeeded()
             }
-
-            // Keep overlay views above text rendering.
-            bringSubviewToFront(view)
         }
     }
     
