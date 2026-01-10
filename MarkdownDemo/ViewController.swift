@@ -320,9 +320,6 @@ class ViewController: UIViewController, UITableViewDataSource {
         tableView.allowsSelection = false
         tableView.delaysContentTouches = false
         view.addSubview(tableView)
-
-
-
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {

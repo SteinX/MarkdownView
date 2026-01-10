@@ -1,11 +1,13 @@
 import UIKit
 
-protocol MarkdownImageHandler {
+public protocol MarkdownImageHandler {
     func loadImage(url: URL, imageView: UIImageView, completion: @escaping (UIImage?) -> Void)
 }
 
-class DefaultImageHandler: MarkdownImageHandler {
-    func loadImage(url: URL, imageView: UIImageView, completion: @escaping (UIImage?) -> Void) {
+public class DefaultImageHandler: MarkdownImageHandler {
+    public init() {}
+    
+    public func loadImage(url: URL, imageView: UIImageView, completion: @escaping (UIImage?) -> Void) {
         let task = URLSession.shared.dataTask(with: url) { data, response, error in
             if let data = data, let image = UIImage(data: data) {
                 DispatchQueue.main.async {

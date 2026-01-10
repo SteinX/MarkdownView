@@ -1,10 +1,11 @@
 import UIKit
-import Markdown
 
 class ChatBubbleCell: UITableViewCell {
     
     private let bubbleView = UIView()
-    private let markdownTextView = AttachmentTextView()
+    private let markdownView = MarkdownView()
+    
+    private var currentMarkdown: String?
     
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -12,6 +13,19 @@ class ChatBubbleCell: UITableViewCell {
     }
     
     required init?(coder: NSCoder) { fatalError() }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        
+        let availableWidth = contentView.bounds.width - 32 - 24
+        if availableWidth > 0 && markdownView.preferredMaxLayoutWidth != availableWidth {
+            markdownView.preferredMaxLayoutWidth = availableWidth
+            // 如果宽度变化且有内容，需要触发重新布局
+            if currentMarkdown != nil {
+                invalidateIntrinsicContentSize()
+            }
+        }
+    }
     
     private func setupUI() {
         selectionStyle = .none
@@ -26,55 +40,38 @@ class ChatBubbleCell: UITableViewCell {
         bubbleView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(bubbleView)
         
-        // TextView Configuration
-        markdownTextView.isEditable = false
-        markdownTextView.isSelectable = true
-        markdownTextView.isScrollEnabled = false
-        markdownTextView.backgroundColor = .clear
-        markdownTextView.textContainerInset = .zero
-        markdownTextView.textContainer.lineFragmentPadding = 0
-        markdownTextView.translatesAutoresizingMaskIntoConstraints = false
+        // MarkdownView (UITextView subclass)
+        markdownView.translatesAutoresizingMaskIntoConstraints = false
+        bubbleView.addSubview(markdownView)
 
-        bubbleView.addSubview(markdownTextView)
-
-        
         NSLayoutConstraint.activate([
             bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
             bubbleView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
             bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             
-            markdownTextView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 12),
-            markdownTextView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -12),
-            markdownTextView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 12),
-            markdownTextView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -12)
+            markdownView.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 12),
+            markdownView.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -12),
+            markdownView.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 12),
+            markdownView.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -12)
         ])
     }
     
     override func prepareForReuse() {
         super.prepareForReuse()
-        markdownTextView.cleanUp()
-        markdownTextView.attributedText = nil
+        currentMarkdown = nil
+        markdownView.cleanUp()
     }
     
     func configure(with markdown: String) {
-        let document = Document(parsing: markdown)
+        currentMarkdown = markdown
         
-        // Calculate max width (Screen width - margins)
-        let screenWidth: CGFloat
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            screenWidth = windowScene.screen.bounds.width
-        } else {
-            screenWidth = UIScreen.main.bounds.width
+        // 如果此时已有正确的宽度，直接设置
+        let availableWidth = contentView.bounds.width - 32 - 24
+        if availableWidth > 0 {
+            markdownView.preferredMaxLayoutWidth = availableWidth
         }
 
-        // margins: Cell(32) + Bubble(24) + Safety(8) -> Reduce risk of overflow due to rounding
-        let maxWidth = screenWidth - 32 - 24 - 8
-        
-        var parser = MyMarkdownParser(theme: .default, maxLayoutWidth: maxWidth)
-        let item = parser.parse(document)
-        
-        markdownTextView.attributedText = item.attributedString
-        markdownTextView.attachmentViews = item.attachments
+        markdownView.markdown = markdown
     }
 }
