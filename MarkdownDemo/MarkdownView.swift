@@ -145,6 +145,12 @@ open class MarkdownView: MarkdownTextView {
         }
         
         attributedText = result.attributedString
+        
+        // Force TextKit to invalidate and recalculate layout immediately
+        // This is crucial after cell reuse to avoid stale glyph positions
+        layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
+        layoutManager.ensureLayout(for: textContainer)
+        
         attachmentViews = result.attachments
         
         // Force intrinsic size recalculation
