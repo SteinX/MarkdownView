@@ -29,13 +29,18 @@ struct MarkdownParser: MarkupWalker {
     private var currentTextColor: UIColor
     private let imageHandler: MarkdownImageHandler
     private let isInsideQuote: Bool
+    private let attachmentPool: AttachmentPool?
+    private let codeBlockState: CodeBlockAnalyzer.CodeBlockState?
+    private var currentCodeBlockIndex: Int = 0
     
-    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false) {
+    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil) {
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
         self.currentTextColor = theme.colors.text
         self.imageHandler = imageHandler
         self.isInsideQuote = isInsideQuote
+        self.attachmentPool = attachmentPool
+        self.codeBlockState = codeBlockState
     }
     
     mutating func parse(_ document: Document) -> MarkdownParseResult {
@@ -289,7 +294,17 @@ struct MarkdownParser: MarkupWalker {
     
     mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
-        let view = HorizontalRuleView(theme: theme, width: availableWidth)
+        
+        // Try to dequeue from pool
+        let view: HorizontalRuleView
+        if let pool = attachmentPool, let pooledView = pool.dequeue(HorizontalRuleView.self) {
+            view = pooledView
+            view.update(theme: theme, width: availableWidth)
+        } else {
+            // Create new view
+            view = HorizontalRuleView(theme: theme, width: availableWidth)
+        }
+        
         insertAttachment(view: view, size: view.frame.size, isBlock: true)
     }
     
@@ -311,7 +326,16 @@ struct MarkdownParser: MarkupWalker {
              size = CGSize(width: side, height: side)
         }
         
-        let view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        // Try to dequeue from pool
+        let view: MarkdownImageView
+        if let pool = attachmentPool, let pooledView = pool.dequeue(MarkdownImageView.self) {
+            view = pooledView
+            view.update(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        } else {
+            // Create new view
+            view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        }
+        
         view.frame = CGRect(origin: .zero, size: size)
         
         insertAttachment(view: view, size: size, isBlock: asBlock)
@@ -327,10 +351,29 @@ struct MarkdownParser: MarkupWalker {
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
         let code = codeBlock.code
         let language = codeBlock.language
-        let view = CodeBlockView(code: code, language: language, theme: theme)
-        view.translatesAutoresizingMaskIntoConstraints = false
-        
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+        
+        // Determine if this block should be highlighted
+        let isLastBlock = (currentCodeBlockIndex == (codeBlockState?.totalCodeBlocks ?? 1) - 1)
+        let shouldHighlight = !isLastBlock || !(codeBlockState?.hasUnclosedBlock ?? false)
+        
+        currentCodeBlockIndex += 1
+        
+        // Try to dequeue from pool
+        let view: CodeBlockView
+        if let pool = attachmentPool, let pooledView = pool.dequeue(CodeBlockView.self) {
+            view = pooledView
+            view.update(code: code, language: language, theme: theme, shouldHighlight: shouldHighlight)
+        } else {
+            // Create new view
+            view = CodeBlockView(code: code, language: language, theme: theme)
+            // If not highlighting, we still need to create it but configure manually
+            if !shouldHighlight {
+                view.update(code: code, language: language, theme: theme, shouldHighlight: false)
+            }
+        }
+        
+        view.translatesAutoresizingMaskIntoConstraints = false
         
         let size = view.systemLayoutSizeFitting(
             CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
@@ -350,7 +393,14 @@ struct MarkdownParser: MarkupWalker {
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
         
         let childTheme = theme.quoted
-        var childParser = MarkdownParser(theme: childTheme, maxLayoutWidth: availableWidth - padding, imageHandler: imageHandler, isInsideQuote: true)
+        var childParser = MarkdownParser(
+            theme: childTheme,
+            maxLayoutWidth: availableWidth - padding,
+            imageHandler: imageHandler,
+            isInsideQuote: true,
+            attachmentPool: attachmentPool,
+            codeBlockState: codeBlockState
+        )
         
         for child in blockQuote.children {
             childParser.visit(child)
@@ -382,7 +432,13 @@ struct MarkdownParser: MarkupWalker {
     
     mutating func visitTable(_ table: Table) {
         func parseCell(_ cell: Markup) -> (NSAttributedString, [Int: UIView]) {
-             var parser = InlineParser(theme: theme, baseFont: theme.baseFont, imageHandler: imageHandler, isInsideQuote: isInsideQuote)
+             var parser = InlineParser(
+                theme: theme,
+                baseFont: theme.baseFont,
+                imageHandler: imageHandler,
+                isInsideQuote: isInsideQuote,
+                attachmentPool: attachmentPool
+             )
              parser.visit(cell)
              return (parser.attributedString, parser.attachments)
         }
@@ -391,7 +447,13 @@ struct MarkdownParser: MarkupWalker {
         let boldFont = theme.baseFont.withTraits(.traitBold)
         
         for cell in table.head.cells {
-             var parser = InlineParser(theme: theme, baseFont: boldFont, imageHandler: imageHandler, isInsideQuote: isInsideQuote)
+             var parser = InlineParser(
+                theme: theme,
+                baseFont: boldFont,
+                imageHandler: imageHandler,
+                isInsideQuote: isInsideQuote,
+                attachmentPool: attachmentPool
+             )
              parser.visit(cell)
              headerItems.append((parser.attributedString, parser.attachments))
         }
@@ -498,12 +560,14 @@ struct InlineParser: MarkupWalker {
     let baseFont: UIFont
     let imageHandler: MarkdownImageHandler
     let isInsideQuote: Bool
+    let attachmentPool: AttachmentPool?
     
-    init(theme: MarkdownTheme, baseFont: UIFont, imageHandler: MarkdownImageHandler? = nil, isInsideQuote: Bool = false) {
+    init(theme: MarkdownTheme, baseFont: UIFont, imageHandler: MarkdownImageHandler? = nil, isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil) {
         self.theme = theme
         self.baseFont = baseFont
         self.imageHandler = imageHandler ?? DefaultImageHandler()
         self.isInsideQuote = isInsideQuote
+        self.attachmentPool = attachmentPool
     }
     
     mutating func visitText(_ text: Text) {
@@ -520,7 +584,16 @@ struct InlineParser: MarkupWalker {
         let side = theme.images.inlineSize
         let size = CGSize(width: side, height: side)
         
-        let view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        // Try to dequeue from pool
+        let view: MarkdownImageView
+        if let pool = attachmentPool, let pooledView = pool.dequeue(MarkdownImageView.self) {
+            view = pooledView
+            view.update(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        } else {
+            // Create new view
+            view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+        }
+        
         view.frame = CGRect(origin: .zero, size: size)
         
         let renderer = UIGraphicsImageRenderer(size: size)

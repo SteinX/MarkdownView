@@ -48,10 +48,19 @@ public class MarkdownRenderer {
     }
     
     /// Renders a pre-parsed Document.
-    /// - Parameter document: The Document AST.
+    /// - Parameters:
+    ///   - document: The Document AST.
+    ///   - attachmentPool: Optional pool for reusing attachment views
+    ///   - codeBlockState: Optional state for smart code block highlighting
     /// - Returns: Rendered result.
-    public func render(_ document: Document) -> RenderedMarkdown {
-        var parser = MarkdownParser(theme: theme, maxLayoutWidth: maxLayoutWidth, imageHandler: imageHandler)
+    public func render(_ document: Document, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil) -> RenderedMarkdown {
+        var parser = MarkdownParser(
+            theme: theme,
+            maxLayoutWidth: maxLayoutWidth,
+            imageHandler: imageHandler,
+            attachmentPool: attachmentPool,
+            codeBlockState: codeBlockState
+        )
         let item = parser.parse(document)
         return RenderedMarkdown(attributedString: item.attributedString, attachments: item.attachments)
     }

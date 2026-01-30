@@ -4,14 +4,16 @@ import Highlightr
 #endif
 
 // MARK: - Code Block View
-public class CodeBlockView: UIView {
+public class CodeBlockView: UIView, Reusable {
     private let headerView = UIView()
     private let languageLabel = UILabel()
     private let scrollView = UIScrollView() // Container for content
     private let label = UILabel()
     private let copyButton = UIButton(type: .system)
-    private let code: String
-    private let language: String?
+    private var code: String
+    private var language: String?
+    private var isHighlighted: Bool = false
+    private var currentTheme: MarkdownTheme?
     
     public init(code: String, language: String?, theme: MarkdownTheme) {
         self.code = code
@@ -178,5 +180,59 @@ public class CodeBlockView: UIView {
         print("MarkdownDemo Warning: Highlightr module is NOT imported. Syntax highlighting is disabled.")
         return nil
         #endif
+    }
+    
+    // MARK: - Reuse Support
+    
+    /// Update the view with new content - optimized to skip redundant highlighting
+    /// - Parameters:
+    ///   - code: The code content to display
+    ///   - language: Optional language identifier
+    ///   - theme: Markdown theme for styling
+    ///   - shouldHighlight: Whether to apply syntax highlighting (false for unclosed blocks during streaming)
+    public func update(code: String, language: String?, theme: MarkdownTheme, shouldHighlight: Bool) {
+        // Check if we can skip update (zero-cost reuse)
+        if self.code == code && 
+           self.language == language && 
+           self.isHighlighted == shouldHighlight {
+            return
+        }
+        
+        // Update stored state
+        self.code = code
+        self.language = language
+        self.isHighlighted = shouldHighlight
+        self.currentTheme = theme
+        
+        // Update UI
+        backgroundColor = theme.code.backgroundColor
+        headerView.backgroundColor = theme.code.headerColor
+        
+        if let lang = language, !lang.isEmpty {
+            languageLabel.text = Self.formatLanguageName(lang)
+        } else {
+            languageLabel.text = ""
+        }
+        
+        // Configure code with or without highlighting
+        if shouldHighlight {
+            configureCodeLabel(code: code, language: language, theme: theme)
+        } else {
+            // Skip expensive highlighting for unclosed blocks
+            label.text = code
+            label.font = theme.code.font
+            label.textColor = theme.code.textColor
+        }
+    }
+    
+    /// Prepare view for reuse - reset to clean state
+    public func prepareForReuse() {
+        code = ""
+        language = nil
+        isHighlighted = false
+        currentTheme = nil
+        label.attributedText = nil
+        label.text = nil
+        languageLabel.text = ""
     }
 }

@@ -10,6 +10,30 @@ import UIKit
 class ViewController: UIViewController, UITableViewDataSource {
 
     let tableView = UITableView()
+    
+    // Data Source
+    var messages: [String] = []
+    
+    // Streaming
+    private let streamButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("Start Stream", for: .normal)
+        button.backgroundColor = .systemBlue
+        button.setTitleColor(.white, for: .normal)
+        button.layer.cornerRadius = 20
+        button.titleLabel?.font = .boldSystemFont(ofSize: 16)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        // Add shadow for better visibility
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOffset = CGSize(width: 0, height: 2)
+        button.layer.shadowOpacity = 0.3
+        button.layer.shadowRadius = 4
+        return button
+    }()
+    
+    private var streamingSimulator: StreamingSimulator?
+    private var isStreaming = false
+
     let markdownContent = """
     # Markdown syntax guide
 
@@ -320,15 +344,116 @@ class ViewController: UIViewController, UITableViewDataSource {
         tableView.allowsSelection = false
         tableView.delaysContentTouches = false
         view.addSubview(tableView)
+        
+        // Initial Data
+        messages.append(markdownContent)
+        
+        setupStreamButton()
+    }
+    
+    private func setupStreamButton() {
+        view.addSubview(streamButton)
+        NSLayoutConstraint.activate([
+            streamButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            streamButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            streamButton.widthAnchor.constraint(equalToConstant: 140),
+            streamButton.heightAnchor.constraint(equalToConstant: 50)
+        ])
+        
+        streamButton.addTarget(self, action: #selector(toggleStreaming), for: .touchUpInside)
+    }
+    
+    @objc private func toggleStreaming() {
+        if isStreaming {
+            stopStreaming()
+        } else {
+            startStreaming()
+        }
+    }
+    
+    private func startStreaming() {
+        isStreaming = true
+        streamButton.setTitle("Stop", for: .normal)
+        streamButton.backgroundColor = .systemRed
+        
+        // Add a new empty message for streaming
+        messages.append("")
+        let newIndexPath = IndexPath(row: messages.count - 1, section: 0)
+        tableView.insertRows(at: [newIndexPath], with: .bottom)
+        
+        // Force layout immediately so cell becomes visible/accessible
+        view.layoutIfNeeded()
+        tableView.scrollToRow(at: newIndexPath, at: .bottom, animated: false)
+        
+        // Enable streaming mode for throttled rendering
+        if let cell = self.tableView.cellForRow(at: newIndexPath) as? ChatBubbleCell {
+            cell.setStreaming(true)
+            // Optional: Customize throttle interval (default is 100ms)
+            // cell.setThrottleInterval(0.15)
+        }
+        
+        // Use the same content for demo, but streamed
+        streamingSimulator = StreamingSimulator(text: markdownContent)
+        
+        streamingSimulator?.start(onUpdate: { [weak self] currentText in
+            guard let self = self else { return }
+            
+            // Update data source
+            self.messages[self.messages.count - 1] = currentText
+            
+            // Update cell if visible
+            let lastIndexPath = IndexPath(row: self.messages.count - 1, section: 0)
+            if let cell = self.tableView.cellForRow(at: lastIndexPath) as? ChatBubbleCell {
+                // Check if we are near the bottom BEFORE updating the cell height
+                // This determines if we should "stick" to the bottom after the update
+                let threshold: CGFloat = 20.0
+                let contentHeight = self.tableView.contentSize.height
+                let boundsHeight = self.tableView.bounds.size.height
+                let currentOffset = self.tableView.contentOffset.y
+                let maxOffset = max(0, contentHeight - boundsHeight)
+                let isNearBottom = (maxOffset - currentOffset) <= threshold
+                
+                cell.configure(with: currentText)
+                
+                // Animate height change smoothly
+                UIView.setAnimationsEnabled(false)
+                self.tableView.performBatchUpdates(nil)
+                UIView.setAnimationsEnabled(true)
+                
+                // Only scroll to bottom if user is not manually scrolling AND was already near bottom
+                if !self.tableView.isDragging && !self.tableView.isTracking && isNearBottom {
+                     self.tableView.scrollToRow(at: lastIndexPath, at: .bottom, animated: false)
+                }
+            } else {
+                 // Cell not visible, likely scrolled up. No need to force scroll.
+            }
+        }, onComplete: { [weak self] in
+            self?.stopStreaming()
+        })
+    }
+    
+    private func stopStreaming() {
+        isStreaming = false
+        streamButton.setTitle("Start Stream", for: .normal)
+        streamButton.backgroundColor = .systemBlue
+        
+        // Disable streaming mode to trigger final render
+        let lastIndexPath = IndexPath(row: messages.count - 1, section: 0)
+        if let cell = self.tableView.cellForRow(at: lastIndexPath) as? ChatBubbleCell {
+            cell.setStreaming(false)
+        }
+        
+        streamingSimulator?.stop()
+        streamingSimulator = nil
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return 5 // Show 5 bubbles to test performance
+        return messages.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath) as! ChatBubbleCell
-        cell.configure(with: markdownContent)
+        cell.configure(with: messages[indexPath.row])
         return cell
     }
 }

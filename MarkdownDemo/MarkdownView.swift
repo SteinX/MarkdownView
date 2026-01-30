@@ -20,11 +20,29 @@ open class MarkdownView: MarkdownTextView {
         }
     }
     
+    /// Enable streaming mode to throttle render updates and reduce CPU usage
+    public var isStreaming: Bool = false {
+        didSet {
+            if !isStreaming && oldValue {
+                // Stream ended: cleanup timer and ensure final render
+                finalizeStreamingRender()
+            }
+        }
+    }
+    
+    /// Throttle interval for streaming mode (default 100ms = 10 renders/sec)
+    public var throttleInterval: TimeInterval = 0.1
+    
     public var markdown: String = "" {
         didSet {
-            // Invalidate cache when content changes
-            cachedDocument = nil
-            renderIfReady()
+            if isStreaming {
+                // Streaming mode: throttle rendering
+                scheduleThrottledRender(newMarkdown: markdown)
+            } else {
+                // Normal mode: render immediately
+                cachedDocument = nil
+                renderIfReady()
+            }
         }
     }
     
@@ -54,6 +72,11 @@ open class MarkdownView: MarkdownTextView {
     
     private var lastRenderedWidth: CGFloat = 0
     private var cachedDocument: Document?
+    private let attachmentPool = AttachmentPool.shared
+    
+    // Streaming throttle state
+    private var pendingMarkdown: String?
+    private var throttleTimer: Timer?
     
     // MARK: - Init
     
@@ -76,8 +99,9 @@ open class MarkdownView: MarkdownTextView {
         layoutManager.ensureLayout(for: textContainer)
         let size = layoutManager.usedRect(for: textContainer).size
         let insets = textContainerInset
-        return CGSize(width: ceil(size.width + insets.left + insets.right), 
+        let finalSize = CGSize(width: ceil(size.width + insets.left + insets.right), 
                       height: ceil(size.height + insets.top + insets.bottom + 1))
+        return finalSize
     }
     
     // MARK: - Rendering
@@ -119,10 +143,14 @@ open class MarkdownView: MarkdownTextView {
             lastRenderedWidth = width
         
         // Set text container width for correct intrinsic size calculation
-        textContainer.size.width = width
+        // IMPORTANT: Must set height to large value to allow layout manager to calculate used rect
+        textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         
-        // Clean up old attachments
-        attachmentViews.values.forEach { $0.removeFromSuperview() }
+        // Recycle old attachments back to pool
+        attachmentViews.values.forEach { view in
+            view.removeFromSuperview()
+            attachmentPool.recycle(view)
+        }
         attachmentViews.removeAll()
         
         if markdown.isEmpty {
@@ -131,17 +159,20 @@ open class MarkdownView: MarkdownTextView {
             return
         }
         
+        // Analyze markdown for unclosed code blocks (for smart highlighting)
+        let codeBlockState = CodeBlockAnalyzer.analyze(markdown)
+        
         let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width)
         
         let result: RenderedMarkdown
         if let document = cachedDocument {
             // Reuse cached AST
-            result = renderer.render(document)
+            result = renderer.render(document, attachmentPool: attachmentPool, codeBlockState: codeBlockState)
         } else {
             // Parse and cache
             let document = renderer.parse(markdown)
             cachedDocument = document
-            result = renderer.render(document)
+            result = renderer.render(document, attachmentPool: attachmentPool, codeBlockState: codeBlockState)
         }
         
         attributedText = result.attributedString
@@ -157,6 +188,57 @@ open class MarkdownView: MarkdownTextView {
         invalidateIntrinsicContentSize()
     }
     
+    // MARK: - Streaming Throttle
+    
+    private func scheduleThrottledRender(newMarkdown: String) {
+        // Save latest pending content
+        pendingMarkdown = newMarkdown
+        
+        // If timer already running, wait for it to trigger (don't create new one)
+        guard throttleTimer == nil else { return }
+        
+        // Create throttle timer
+        throttleTimer = Timer.scheduledTimer(
+            withTimeInterval: throttleInterval,
+            repeats: false
+        ) { [weak self] _ in
+            self?.executeThrottledRender()
+        }
+    }
+    
+    private func executeThrottledRender() {
+        guard pendingMarkdown != nil else {
+            throttleTimer = nil
+            return
+        }
+        
+        // Clear pending content and timer
+        pendingMarkdown = nil
+        throttleTimer = nil
+        
+        // Execute render
+        cachedDocument = nil
+        let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
+        if width > 0 {
+            render(with: width)
+        } else {
+            setNeedsLayout()
+        }
+    }
+    
+    private func finalizeStreamingRender() {
+        // Cancel pending timer
+        throttleTimer?.invalidate()
+        throttleTimer = nil
+        
+        // If there's unrendered content, render it immediately
+        if pendingMarkdown != nil {
+            pendingMarkdown = nil
+            cachedDocument = nil
+            renderIfReady()
+        }
+    }
+    
     // MARK: - Cleanup
     
     /// Call this before reusing the view (e.g., in prepareForReuse)
@@ -165,5 +247,10 @@ open class MarkdownView: MarkdownTextView {
         markdown = ""
         cachedDocument = nil
         lastRenderedWidth = 0
+        
+        // Clean up throttle state
+        throttleTimer?.invalidate()
+        throttleTimer = nil
+        pendingMarkdown = nil
     }
 }

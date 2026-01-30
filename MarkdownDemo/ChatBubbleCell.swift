@@ -74,4 +74,16 @@ class ChatBubbleCell: UITableViewCell {
 
         markdownView.markdown = markdown
     }
+    
+    // MARK: - Streaming Control
+    
+    /// Enable/disable streaming mode for throttled rendering
+    func setStreaming(_ streaming: Bool) {
+        markdownView.isStreaming = streaming
+    }
+    
+    /// Configure throttle interval for streaming mode (default 100ms)
+    func setThrottleInterval(_ interval: TimeInterval) {
+        markdownView.throttleInterval = interval
+    }
 }

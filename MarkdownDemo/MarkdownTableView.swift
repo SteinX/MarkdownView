@@ -40,7 +40,7 @@ public class MarkdownTableCell: UICollectionViewCell {
     }
 }
 
-public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, Reusable {
     // Data now includes Attachments
     private let headers: [(NSAttributedString, [Int: UIView])]
     private let rows: [[(NSAttributedString, [Int: UIView])]]
@@ -303,5 +303,12 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         let totalHeight = rowHeights.reduce(0, +)
         
         return (totalWidth, totalHeight, finalColWidths, rowHeights)
+    }
+    
+    // MARK: - Reuse Support
+    
+    /// Prepare view for reuse - recycle only (no update method)
+    public func prepareForReuse() {
+        // Collection view cells already handle their own cleanup via prepareForReuse
     }
 }

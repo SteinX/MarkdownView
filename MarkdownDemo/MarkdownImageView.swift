@@ -1,11 +1,11 @@
 import UIKit
 
 // MARK: - Markdown Image View
-public class MarkdownImageView: UIView {
+public class MarkdownImageView: UIView, Reusable {
     private let imageView = UIImageView()
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
-    private let url: URL
-    private let imageHandler: MarkdownImageHandler
+    private var url: URL
+    private var imageHandler: MarkdownImageHandler
     
     // For "grayed out" effect in quotes
     public var isDimmed: Bool = false {
@@ -74,5 +74,35 @@ public class MarkdownImageView: UIView {
                 self.imageView.contentMode = .scaleAspectFit
             }
         }
+    }
+    
+    // MARK: - Reuse Support
+    
+    /// Update the view with new content
+    public func update(url: URL, imageHandler: MarkdownImageHandler, theme: MarkdownTheme, isDimmed: Bool) {
+        // Check if we can skip update
+        if self.url == url && self.isDimmed == isDimmed {
+            return
+        }
+        
+        // Update state
+        self.url = url
+        self.imageHandler = imageHandler
+        self.isDimmed = isDimmed
+        
+        // Update UI
+        imageView.backgroundColor = theme.images.backgroundColor
+        imageView.image = theme.images.loadingPlaceholder
+        imageView.tintColor = .systemGray4
+        
+        updateDimmedState()
+        loadImage()
+    }
+    
+    /// Prepare view for reuse
+    public func prepareForReuse() {
+        imageView.image = nil
+        activityIndicator.stopAnimating()
+        isDimmed = false
     }
 }

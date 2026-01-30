@@ -1,7 +1,7 @@
 import UIKit
 
 // MARK: - Quote View
-public class QuoteView: UIView {
+public class QuoteView: UIView, Reusable {
     private let textView = MarkdownTextView()
     private let border = UIView()
     private let padding: CGFloat
@@ -77,5 +77,14 @@ public class QuoteView: UIView {
     private func configure(attributedText: NSAttributedString, attachments: [Int: UIView]) {
         textView.attributedText = attributedText
         textView.attachmentViews = attachments
+    }
+    
+    // MARK: - Reuse Support
+    
+    /// Prepare view for reuse - recycle only (no update method)
+    public func prepareForReuse() {
+        textView.cleanUp()
+        widthConstraint?.isActive = false
+        widthConstraint = nil
     }
 }
