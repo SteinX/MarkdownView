@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9AC0C2BB2EF717E500390CE2 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = 9AC0C2BA2EF717E500390CE2 /* Markdown */; };
+		9A1111112F10000100000001 /* STXMarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1111112F10000100000002 /* STXMarkdownView */; };
 		9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
 /* End PBXBuildFile section */
 
@@ -41,8 +41,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A1111112F10000100000001 /* STXMarkdownView in Frameworks */,
 				9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */,
-				9AC0C2BB2EF717E500390CE2 /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,7 +85,7 @@
 			);
 			name = MarkdownDemo;
 			packageProductDependencies = (
-				9AC0C2BA2EF717E500390CE2 /* Markdown */,
+				9A1111112F10000100000002 /* STXMarkdownView */,
 				9AE25AB12F04BDE400E3DD5B /* Highlightr */,
 			);
 			productName = MarkdownDemo;
@@ -117,7 +117,7 @@
 			mainGroup = 9AC0C28E2EF70E5100390CE2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				9AC0C2B92EF717E500390CE2 /* XCRemoteSwiftPackageReference "swift-markdown" */,
+				9A1111112F10000100000003 /* XCLocalSwiftPackageReference "STXMarkdownView" */,
 				9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -165,6 +165,7 @@
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -196,6 +197,7 @@
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -355,15 +357,14 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		9AC0C2B92EF717E500390CE2 /* XCRemoteSwiftPackageReference "swift-markdown" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/swiftlang/swift-markdown";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.7.3;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		9A1111112F10000100000003 /* XCLocalSwiftPackageReference "STXMarkdownView" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = STXMarkdownView;
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/raspu/Highlightr.git";
@@ -375,10 +376,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		9AC0C2BA2EF717E500390CE2 /* Markdown */ = {
+		9A1111112F10000100000002 /* STXMarkdownView */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9AC0C2B92EF717E500390CE2 /* XCRemoteSwiftPackageReference "swift-markdown" */;
-			productName = Markdown;
+			package = 9A1111112F10000100000003 /* XCLocalSwiftPackageReference "STXMarkdownView" */;
+			productName = STXMarkdownView;
 		};
 		9AE25AB12F04BDE400E3DD5B /* Highlightr */ = {
 			isa = XCSwiftPackageProductDependency;

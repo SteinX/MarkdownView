@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import STXMarkdownView
 
 class ViewController: UIViewController, UITableViewDataSource {
 

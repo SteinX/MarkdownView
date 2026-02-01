@@ -1,4 +1,5 @@
 import UIKit
+import STXMarkdownView
 
 class ChatBubbleCell: UITableViewCell {
     

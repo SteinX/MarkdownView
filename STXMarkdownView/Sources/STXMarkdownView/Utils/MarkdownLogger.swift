@@ -53,7 +53,7 @@ internal struct MarkdownLogger {
     static var level: MarkdownLogLevel = .off
     
     /// Subsystem 标识
-    private static let subsystem = "com.app.markdown"
+    private static let subsystem = "com.stx.markdown"
     
     /// 缓存的 OSLog 实例
     private static var loggers: [MarkdownLogCategory: OSLog] = [:]

@@ -1,4 +1,5 @@
 import UIKit
+import STXMarkdownView
 
 final class StreamingDemoViewController: UIViewController {
 
