@@ -50,3 +50,4 @@ playground.xcworkspace
 *.log
 
 buildServer.json
+.vscode/
