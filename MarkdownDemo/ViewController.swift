@@ -334,6 +334,16 @@ class ViewController: UIViewController, UITableViewDataSource {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemGroupedBackground
+        title = "Chat"
+        
+        // Enable debug logging for development (with performance timing)
+        // View logs in Console.app by filtering: subsystem:com.app.markdown
+        MarkdownView.logLevel = .verbose
+        
+        // Other available log levels:
+        // MarkdownView.logLevel = .info   // Info-level logging only
+        // MarkdownView.logLevel = .error  // Error-level logging only
+        // MarkdownView.logLevel = .off    // Disable all logging
         
         tableView.frame = view.bounds
         tableView.dataSource = self
@@ -457,4 +467,3 @@ class ViewController: UIViewController, UITableViewDataSource {
         return cell
     }
 }
-

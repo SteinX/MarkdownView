@@ -6,6 +6,7 @@ class StreamingSimulator {
     private var timer: Timer?
     private var onUpdate: ((String) -> Void)?
     private var onComplete: (() -> Void)?
+    private let interval: TimeInterval = 0.05
     
     private(set) var currentText: String = ""
     private(set) var isStreaming: Bool = false
@@ -23,8 +24,10 @@ class StreamingSimulator {
         self.isStreaming = true
         self.currentText = ""
         self.currentIndex = fullText.startIndex
+
+        MarkdownLogger.info(.streaming, "stream start length=\(fullText.count), interval=\(String(format: "%.2f", interval))s")
         
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.tick()
         }
     }
@@ -33,11 +36,13 @@ class StreamingSimulator {
         timer?.invalidate()
         timer = nil
         isStreaming = false
+        MarkdownLogger.info(.streaming, "stream stop current=\(currentText.count)")
     }
     
     private func tick() {
         guard currentIndex < fullText.endIndex else {
             stop()
+            MarkdownLogger.info(.streaming, "stream complete length=\(currentText.count)")
             onComplete?()
             return
         }
