@@ -14,15 +14,17 @@ public class MarkdownRenderer {
     public let theme: MarkdownTheme
     public let imageHandler: MarkdownImageHandler
     public let maxLayoutWidth: CGFloat
+    public let tableSizeCache: TableCellSizeCache
     
     /// Initializes the renderer with configuration options.
     /// - Parameters:
     ///   - theme: The theme to use for styling. Defaults to `MarkdownTheme.default`.
     ///   - imageHandler: Handler for loading images. Defaults to `DefaultImageHandler`.
     ///   - maxLayoutWidth: The maximum width for layout calculations (important for tables, blocks, etc.).
-    public init(theme: MarkdownTheme = .default, imageHandler: MarkdownImageHandler = DefaultImageHandler(), maxLayoutWidth: CGFloat = 0) {
+    public init(theme: MarkdownTheme = .default, imageHandler: MarkdownImageHandler = DefaultImageHandler(), maxLayoutWidth: CGFloat = 0, tableSizeCache: TableCellSizeCache = TableCellSizeCache()) {
         self.theme = theme
         self.imageHandler = imageHandler
+        self.tableSizeCache = tableSizeCache
         
         if maxLayoutWidth > 0 {
             self.maxLayoutWidth = maxLayoutWidth
@@ -61,7 +63,8 @@ public class MarkdownRenderer {
             imageHandler: imageHandler,
             attachmentPool: attachmentPool,
             codeBlockState: codeBlockState,
-            isStreaming: isStreaming
+            isStreaming: isStreaming,
+            tableSizeCache: tableSizeCache
         )
         
         let item = MarkdownLogger.measure(.renderer, "render document") {

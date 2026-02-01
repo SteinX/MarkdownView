@@ -76,6 +76,7 @@ open class MarkdownView: MarkdownTextView {
     private var cachedDocument: Document?
     private let _attachmentPool = AttachmentPool()
     private var lastRenderWasStreaming: Bool = false
+    private let tableSizeCache = TableCellSizeCache()
     
     // Streaming throttle state
     private var pendingMarkdown: String?
@@ -182,7 +183,7 @@ open class MarkdownView: MarkdownTextView {
         // Analyze markdown for unclosed code blocks (for smart highlighting)
         let codeBlockState = CodeBlockAnalyzer.analyze(markdown)
         
-        let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width)
+        let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width, tableSizeCache: tableSizeCache)
         
         let result: RenderedMarkdown
         if let document = cachedDocument {

@@ -52,12 +52,19 @@ public struct MarkdownTableContentKey: AttachmentContentKey {
     }
 }
 
+public struct MarkdownTableLayoutResult {
+    public let contentSize: CGSize
+    public let columnWidths: [CGFloat]
+    public let rowHeights: [CGFloat]
+}
+
 public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, Reusable {
     // Data now includes Attachments
     private var headers: [(NSAttributedString, [Int: AttachmentInfo])]
     private var rows: [[(NSAttributedString, [Int: AttachmentInfo])]]
     private var theme: MarkdownTheme
     private var maxLayoutWidth: CGFloat
+    private var sizeCache: TableCellSizeCache?
     
     private var scrollView: UIScrollView!
     private var collectionView: UICollectionView!
@@ -70,16 +77,21 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     private var rowHeights: [CGFloat] = []
     private var tableContentSize: CGSize = .zero
     
-    public init(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
+    public init(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat, precomputedLayout: MarkdownTableLayoutResult? = nil, sizeCache: TableCellSizeCache? = nil) {
         self.headers = headers
         self.rows = rows
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
+        self.sizeCache = sizeCache
         super.init(frame: .zero)
         
         MarkdownLogger.debug(.table, "init cols=\(headers.count), rows=\(rows.count), maxWidth=\(Int(maxLayoutWidth))")
-        
-        calculateLayoutData()
+
+        if let precomputedLayout = precomputedLayout {
+            applyLayout(precomputedLayout)
+        } else {
+            calculateLayoutData()
+        }
         setupUI()
     }
     
@@ -93,17 +105,9 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     private func calculateLayoutData() {
         let headerTexts = headers.map { $0.0 }
         let rowTexts = rows.map { row in row.map { $0.0 } }
-        
-        let result = MarkdownLogger.measure(.table, "calculateLayout") {
-            MarkdownTableView.calculateLayout(headers: headerTexts, rows: rowTexts, theme: theme, maxWidth: maxLayoutWidth)
-        }
-        
-        let (width, height, widths, heights) = result
-        self.tableContentSize = CGSize(width: width, height: height)
-        self.columnWidths = widths
-        self.rowHeights = heights
-        
-        MarkdownLogger.verbose(.table, "layout: size=\(Int(width))x\(Int(height)), colWidths=\(widths.map { Int($0) })")
+
+        let result = MarkdownTableView.computeLayout(headers: headerTexts, rows: rowTexts, theme: theme, maxWidth: maxLayoutWidth, cache: sizeCache)
+        applyLayout(result)
     }
     
     private func setupUI() {
@@ -168,12 +172,20 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         clipsToBounds = true
     }
 
-    public func update(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
+    public func update(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat, precomputedLayout: MarkdownTableLayoutResult? = nil, sizeCache: TableCellSizeCache? = nil) {
         self.headers = headers
         self.rows = rows
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
-        calculateLayoutData()
+        if let sizeCache = sizeCache {
+            self.sizeCache = sizeCache
+        }
+
+        if let precomputedLayout = precomputedLayout {
+            applyLayout(precomputedLayout)
+        } else {
+            calculateLayoutData()
+        }
 
         collectionWidthConstraint?.constant = tableContentSize.width
         collectionHeightConstraint?.constant = tableContentSize.height
@@ -229,13 +241,35 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     
     // MARK: - Layout Calculation (Static & Internal)
     
-    public static func computedSize(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat) -> CGSize {
-        let (totalWidth, totalHeight, _, _) = calculateLayout(headers: headers, rows: rows, theme: theme, maxWidth: maxWidth)
-        // Ensure the view frame doesn't exceed screen width, even if content scrolls internals
-        return CGSize(width: min(totalWidth, maxWidth), height: totalHeight)
+    public static func computeLayout(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat, cache: TableCellSizeCache? = nil) -> MarkdownTableLayoutResult {
+        let start = CFAbsoluteTimeGetCurrent()
+        let result = MarkdownLogger.measure(.table, "calculateLayout") {
+            calculateLayout(headers: headers, rows: rows, theme: theme, maxWidth: maxWidth, cache: cache)
+        }
+        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+
+        if MarkdownLogger.level >= .debug {
+            let rowCount = rows.count + 1
+            let colCount = headers.count
+            MarkdownLogger.debug(.table, "layout rows=\(rowCount) cols=\(colCount) maxWidth=\(Int(maxWidth)) time=\(String(format: "%.2f", elapsed))ms")
+        }
+
+        if elapsed >= 50 {
+            let rowCount = rows.count + 1
+            let colCount = headers.count
+            MarkdownLogger.warning(.table, "layout spike rows=\(rowCount) cols=\(colCount) maxWidth=\(Int(maxWidth)) time=\(String(format: "%.2f", elapsed))ms")
+        }
+
+        if let cache = cache, MarkdownLogger.level >= .debug {
+            let rowCount = rows.count + 1
+            let colCount = headers.count
+            cache.logStats(context: "layout rows=\(rowCount) cols=\(colCount)")
+        }
+
+        return result
     }
     
-    private static func calculateLayout(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat) -> (CGFloat, CGFloat, [CGFloat], [CGFloat]) {
+    private static func calculateLayout(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat, cache: TableCellSizeCache?) -> MarkdownTableLayoutResult {
         let padding: CGFloat = 16
         let extraBuffer: CGFloat = 4
         // The minimum reasonable width for a column to prevent complete crushing
@@ -251,13 +285,20 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
              let row = allRows[rowIndex]
             for (colIndex, val) in row.enumerated() {
                 if colIndex < columnCount {
-                    let rect = val.boundingRect(
-                        with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 1000),
-                        options: [.usesLineFragmentOrigin, .usesFontLeading],
-                        context: nil
-                    )
-                    let width = ceil(rect.width) + padding + extraBuffer
-                    intrinsicWidths[colIndex] = max(intrinsicWidths[colIndex], width)
+                    if let cachedWidth = cache?.intrinsicWidth(for: val) {
+                        let width = cachedWidth + padding + extraBuffer
+                        intrinsicWidths[colIndex] = max(intrinsicWidths[colIndex], width)
+                    } else {
+                        let rect = val.boundingRect(
+                            with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: 1000),
+                            options: [.usesLineFragmentOrigin, .usesFontLeading],
+                            context: nil
+                        )
+                        let measuredWidth = ceil(rect.width)
+                        cache?.storeIntrinsic(text: val, width: measuredWidth, height: ceil(rect.height))
+                        let width = measuredWidth + padding + extraBuffer
+                        intrinsicWidths[colIndex] = max(intrinsicWidths[colIndex], width)
+                    }
                 }
             }
         }
@@ -333,13 +374,20 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
                     let width = finalColWidths[colIndex]
                     let textWidth = max(1, width - padding) // Ensure > 0
                     
-                    let rect = val.boundingRect(
-                        with: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude),
-                        options: [.usesLineFragmentOrigin, .usesFontLeading],
-                        context: nil
-                    )
-                    let height = ceil(rect.height) + padding
-                    maxHeight = max(maxHeight, height)
+                    if let cachedHeight = cache?.height(for: val, width: textWidth) {
+                        let height = cachedHeight + padding
+                        maxHeight = max(maxHeight, height)
+                    } else {
+                        let rect = val.boundingRect(
+                            with: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude),
+                            options: [.usesLineFragmentOrigin, .usesFontLeading],
+                            context: nil
+                        )
+                        let measuredHeight = ceil(rect.height)
+                        cache?.storeHeight(text: val, width: textWidth, height: measuredHeight)
+                        let height = measuredHeight + padding
+                        maxHeight = max(maxHeight, height)
+                    }
                 }
             }
             rowHeights.append(maxHeight)
@@ -347,8 +395,22 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         
         let totalWidth = finalColWidths.reduce(0, +)
         let totalHeight = rowHeights.reduce(0, +)
-        
-        return (totalWidth, totalHeight, finalColWidths, rowHeights)
+
+        let result = MarkdownTableLayoutResult(
+            contentSize: CGSize(width: totalWidth, height: totalHeight),
+            columnWidths: finalColWidths,
+            rowHeights: rowHeights
+        )
+
+        return result
+    }
+
+    private func applyLayout(_ result: MarkdownTableLayoutResult) {
+        self.tableContentSize = result.contentSize
+        self.columnWidths = result.columnWidths
+        self.rowHeights = result.rowHeights
+
+        MarkdownLogger.verbose(.table, "layout: size=\(Int(result.contentSize.width))x\(Int(result.contentSize.height)), colWidths=\(result.columnWidths.map { Int($0) })")
     }
     
     // MARK: - Reuse Support

@@ -32,9 +32,10 @@ struct MarkdownParser: MarkupWalker {
     private let attachmentPool: AttachmentPool?
     private let codeBlockState: CodeBlockAnalyzer.CodeBlockState?
     private let isStreaming: Bool
+    private let tableSizeCache: TableCellSizeCache?
     private var currentCodeBlockIndex: Int = 0
     
-    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil, isStreaming: Bool = false) {
+    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil, isStreaming: Bool = false, tableSizeCache: TableCellSizeCache? = nil) {
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
         self.currentTextColor = theme.colors.text
@@ -43,6 +44,7 @@ struct MarkdownParser: MarkupWalker {
         self.attachmentPool = attachmentPool
         self.codeBlockState = codeBlockState
         self.isStreaming = isStreaming
+        self.tableSizeCache = tableSizeCache
     }
     
     mutating func parse(_ document: Document) -> MarkdownParseResult {
@@ -443,7 +445,8 @@ struct MarkdownParser: MarkupWalker {
             isInsideQuote: true,
             attachmentPool: nil,
             codeBlockState: codeBlockState,
-            isStreaming: isStreaming
+            isStreaming: isStreaming,
+            tableSizeCache: tableSizeCache
         )
         
         for child in blockQuote.children {
@@ -540,11 +543,12 @@ struct MarkdownParser: MarkupWalker {
         let headerTexts = headerItems.map { $0.0 }
         let rowTexts = rowItems.map { row in row.map { $0.0 } }
         
-        let size = MarkdownTableView.computedSize(
+        let layoutResult = MarkdownTableView.computeLayout(
             headers: headerTexts,
             rows: rowTexts,
             theme: theme,
-            maxWidth: availableWidth
+            maxWidth: availableWidth,
+            cache: tableSizeCache
         )
 
         let dataHash = tableDataHash(headers: headerItems, rows: rowItems)
@@ -559,19 +563,21 @@ struct MarkdownParser: MarkupWalker {
            let (pooledView, exactMatch): (MarkdownTableView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
             if !exactMatch {
-                view.update(headers: headerItems, rows: rowItems, theme: theme, maxLayoutWidth: availableWidth)
+                view.update(headers: headerItems, rows: rowItems, theme: theme, maxLayoutWidth: availableWidth, precomputedLayout: layoutResult, sizeCache: tableSizeCache)
             }
         } else {
             view = MarkdownTableView(
                 headers: headerItems,
                 rows: rowItems,
                 theme: theme,
-                maxLayoutWidth: availableWidth
+                maxLayoutWidth: availableWidth,
+                precomputedLayout: layoutResult,
+                sizeCache: tableSizeCache
             )
         }
-        
-        view.frame = CGRect(origin: .zero, size: size)
-        insertAttachment(view: view, size: size, isBlock: true, contentKey: contentKey)
+
+        view.frame = CGRect(origin: .zero, size: layoutResult.contentSize)
+        insertAttachment(view: view, size: layoutResult.contentSize, isBlock: true, contentKey: contentKey)
     }
     
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
