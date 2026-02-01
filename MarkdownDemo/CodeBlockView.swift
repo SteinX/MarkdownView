@@ -164,7 +164,7 @@ public class CodeBlockView: UIView, Reusable {
         #if canImport(Highlightr)
 
         guard let highlightr = Highlightr() else {
-             print("MarkdownDemo Error: Failed to initialize Highlightr")
+             MarkdownLogger.error(.codeBlock, "Failed to initialize Highlightr")
              return nil
         }
         highlightr.setTheme(to: themeName)
@@ -173,11 +173,11 @@ public class CodeBlockView: UIView, Reusable {
         if let result = highlightr.highlight(code, as: language, fastRender: true) {
              return result
         } else {
-             print("MarkdownDemo Error: Highlightr failed to highlight code for language: \(language)")
+             MarkdownLogger.error(.codeBlock, "Highlightr failed to highlight code for language: \(language)")
              return nil
         }
         #else
-        print("MarkdownDemo Warning: Highlightr module is NOT imported. Syntax highlighting is disabled.")
+        MarkdownLogger.warning(.codeBlock, "Highlightr module is NOT imported. Syntax highlighting is disabled.")
         return nil
         #endif
     }
@@ -195,8 +195,11 @@ public class CodeBlockView: UIView, Reusable {
         if self.code == code && 
            self.language == language && 
            self.isHighlighted == shouldHighlight {
+            MarkdownLogger.verbose(.codeBlock, "update skipped, content unchanged")
             return
         }
+        
+        MarkdownLogger.debug(.codeBlock, "update lang=\(language ?? "none"), highlight=\(shouldHighlight), lines=\(code.components(separatedBy: "\n").count)")
         
         // Update stored state
         self.code = code
@@ -234,5 +237,30 @@ public class CodeBlockView: UIView, Reusable {
         label.attributedText = nil
         label.text = nil
         languageLabel.text = ""
+    }
+}
+
+public struct CodeBlockContentKey: AttachmentContentKey {
+    public let codeHash: Int
+    public let codeLength: Int
+    public let language: String?
+    public let shouldHighlight: Bool
+    public let width: CGFloat
+    public let isInsideQuote: Bool
+
+    public init(
+        codeHash: Int,
+        codeLength: Int,
+        language: String?,
+        shouldHighlight: Bool,
+        width: CGFloat,
+        isInsideQuote: Bool
+    ) {
+        self.codeHash = codeHash
+        self.codeLength = codeLength
+        self.language = language
+        self.shouldHighlight = shouldHighlight
+        self.width = width
+        self.isInsideQuote = isInsideQuote
     }
 }

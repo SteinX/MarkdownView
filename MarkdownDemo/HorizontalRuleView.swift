@@ -30,3 +30,13 @@ public class HorizontalRuleView: UIView, Reusable {
         // Nothing to clean up for horizontal rule
     }
 }
+
+public struct HorizontalRuleContentKey: AttachmentContentKey {
+    public let width: CGFloat
+    public let isInsideQuote: Bool
+
+    public init(width: CGFloat, isInsideQuote: Bool) {
+        self.width = width
+        self.isInsideQuote = isInsideQuote
+    }
+}

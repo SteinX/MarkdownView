@@ -64,14 +64,20 @@ public class MarkdownImageView: UIView, Reusable {
     }
     
     private func loadImage() {
+        MarkdownLogger.debug(.image, "loading started, url=\(url.absoluteString)")
+        
         activityIndicator.startAnimating()
-        imageHandler.loadImage(url: url, imageView: imageView) { [weak self] image in
+        let targetSize = bounds.size.width > 0 ? bounds.size : CGSize(width: 300, height: 300)
+        imageHandler.loadImage(url: url, targetSize: targetSize, imageView: imageView) { [weak self] image in
             guard let self = self else { return }
             self.activityIndicator.stopAnimating()
             
             if let image = image {
+                MarkdownLogger.info(.image, "loading succeeded, url=\(self.url.lastPathComponent), size=\(Int(image.size.width))x\(Int(image.size.height))")
                 self.imageView.image = image
                 self.imageView.contentMode = .scaleAspectFit
+            } else {
+                MarkdownLogger.warning(.image, "loading failed, url=\(self.url.absoluteString)")
             }
         }
     }
@@ -81,7 +87,7 @@ public class MarkdownImageView: UIView, Reusable {
     /// Update the view with new content
     public func update(url: URL, imageHandler: MarkdownImageHandler, theme: MarkdownTheme, isDimmed: Bool) {
         // Check if we can skip update
-        if self.url == url && self.isDimmed == isDimmed {
+        if self.url == url && self.isDimmed == isDimmed && imageView.image != nil {
             return
         }
         
@@ -101,8 +107,21 @@ public class MarkdownImageView: UIView, Reusable {
     
     /// Prepare view for reuse
     public func prepareForReuse() {
-        imageView.image = nil
         activityIndicator.stopAnimating()
         isDimmed = false
+    }
+}
+
+public struct MarkdownImageContentKey: AttachmentContentKey {
+    public let url: URL
+    public let isDimmed: Bool
+    public let width: CGFloat
+    public let height: CGFloat
+
+    public init(url: URL, isDimmed: Bool, width: CGFloat, height: CGFloat) {
+        self.url = url
+        self.isDimmed = isDimmed
+        self.width = width
+        self.height = height
     }
 }

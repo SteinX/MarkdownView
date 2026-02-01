@@ -26,7 +26,7 @@ public class MarkdownTableCell: UICollectionViewCell {
         ])
     }
     
-    func configure(attributedText: NSAttributedString, attachments: [Int: UIView], theme: MarkdownTheme, isHeader: Bool) {
+    func configure(attributedText: NSAttributedString, attachments: [Int: AttachmentInfo], theme: MarkdownTheme, isHeader: Bool) {
         textView.attributedText = attributedText
         textView.attachmentViews = attachments
         
@@ -40,27 +40,45 @@ public class MarkdownTableCell: UICollectionViewCell {
     }
 }
 
+public struct MarkdownTableContentKey: AttachmentContentKey {
+    public let dataHash: Int
+    public let width: CGFloat
+    public let isInsideQuote: Bool
+
+    public init(dataHash: Int, width: CGFloat, isInsideQuote: Bool) {
+        self.dataHash = dataHash
+        self.width = width
+        self.isInsideQuote = isInsideQuote
+    }
+}
+
 public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, Reusable {
     // Data now includes Attachments
-    private let headers: [(NSAttributedString, [Int: UIView])]
-    private let rows: [[(NSAttributedString, [Int: UIView])]]
-    private let theme: MarkdownTheme
-    private let maxLayoutWidth: CGFloat
+    private var headers: [(NSAttributedString, [Int: AttachmentInfo])]
+    private var rows: [[(NSAttributedString, [Int: AttachmentInfo])]]
+    private var theme: MarkdownTheme
+    private var maxLayoutWidth: CGFloat
     
     private var scrollView: UIScrollView!
     private var collectionView: UICollectionView!
+    private var collectionWidthConstraint: NSLayoutConstraint?
+    private var collectionHeightConstraint: NSLayoutConstraint?
+    private var scrollContentHeightConstraint: NSLayoutConstraint?
     
     // Layout Data
     private var columnWidths: [CGFloat] = []
     private var rowHeights: [CGFloat] = []
     private var tableContentSize: CGSize = .zero
     
-    public init(headers: [(NSAttributedString, [Int: UIView])], rows: [[(NSAttributedString, [Int: UIView])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
+    public init(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
         self.headers = headers
         self.rows = rows
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
         super.init(frame: .zero)
+        
+        MarkdownLogger.debug(.table, "init cols=\(headers.count), rows=\(rows.count), maxWidth=\(Int(maxLayoutWidth))")
+        
         calculateLayoutData()
         setupUI()
     }
@@ -76,10 +94,16 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         let headerTexts = headers.map { $0.0 }
         let rowTexts = rows.map { row in row.map { $0.0 } }
         
-        let (width, height, widths, heights) = MarkdownTableView.calculateLayout(headers: headerTexts, rows: rowTexts, theme: theme, maxWidth: maxLayoutWidth)
+        let result = MarkdownLogger.measure(.table, "calculateLayout") {
+            MarkdownTableView.calculateLayout(headers: headerTexts, rows: rowTexts, theme: theme, maxWidth: maxLayoutWidth)
+        }
+        
+        let (width, height, widths, heights) = result
         self.tableContentSize = CGSize(width: width, height: height)
         self.columnWidths = widths
         self.rowHeights = heights
+        
+        MarkdownLogger.verbose(.table, "layout: size=\(Int(width))x\(Int(height)), colWidths=\(widths.map { Int($0) })")
     }
     
     private func setupUI() {
@@ -109,6 +133,13 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         
         scrollView.addSubview(collectionView)
         
+        let collectionWidth = collectionView.widthAnchor.constraint(equalToConstant: tableContentSize.width)
+        let collectionHeight = collectionView.heightAnchor.constraint(equalToConstant: tableContentSize.height)
+        let scrollHeight = scrollView.contentLayoutGuide.heightAnchor.constraint(equalToConstant: tableContentSize.height)
+        collectionWidthConstraint = collectionWidth
+        collectionHeightConstraint = collectionHeight
+        scrollContentHeightConstraint = scrollHeight
+
         NSLayoutConstraint.activate([
             // ScrollView fills the container view
             scrollView.topAnchor.constraint(equalTo: topAnchor),
@@ -123,11 +154,11 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
             collectionView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
             
             // Critical constraints: Force CollectionView to match content size
-            collectionView.widthAnchor.constraint(equalToConstant: tableContentSize.width),
-            collectionView.heightAnchor.constraint(equalToConstant: tableContentSize.height),
+            collectionWidth,
+            collectionHeight,
             
              // Ensure ScrollView content height matches table height
-             scrollView.contentLayoutGuide.heightAnchor.constraint(equalToConstant: tableContentSize.height)
+             scrollHeight
         ])
         
         // Border
@@ -135,6 +166,21 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         layer.borderColor = theme.tables.borderColor.cgColor
         layer.cornerRadius = 4
         clipsToBounds = true
+    }
+
+    public func update(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat) {
+        self.headers = headers
+        self.rows = rows
+        self.theme = theme
+        self.maxLayoutWidth = maxLayoutWidth
+        calculateLayoutData()
+
+        collectionWidthConstraint?.constant = tableContentSize.width
+        collectionHeightConstraint?.constant = tableContentSize.height
+        scrollContentHeightConstraint?.constant = tableContentSize.height
+
+        collectionView.reloadData()
+        invalidateIntrinsicContentSize()
     }
     
     // MARK: - DataSource
@@ -151,7 +197,7 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath) as! MarkdownTableCell
         
         let isHeader = indexPath.section == 0
-        let cellData: (NSAttributedString, [Int: UIView])
+        let cellData: (NSAttributedString, [Int: AttachmentInfo])
         
         if isHeader {
             cellData = headers[indexPath.item]
@@ -310,5 +356,6 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     /// Prepare view for reuse - recycle only (no update method)
     public func prepareForReuse() {
         // Collection view cells already handle their own cleanup via prepareForReuse
+        collectionView?.reloadData()
     }
 }

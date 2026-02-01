@@ -4,7 +4,7 @@ import Markdown
 /// Result of the markdown rendering including the text and view attachments.
 public struct RenderedMarkdown {
     public let attributedString: NSAttributedString
-    public let attachments: [Int: UIView]
+    public let attachments: [Int: AttachmentInfo]
 }
 
 /// A public renderer that converts Markdown text into NSAttributedString.
@@ -52,16 +52,22 @@ public class MarkdownRenderer {
     ///   - document: The Document AST.
     ///   - attachmentPool: Optional pool for reusing attachment views
     ///   - codeBlockState: Optional state for smart code block highlighting
+    ///   - isStreaming: Whether this render is part of a streaming sequence.
     /// - Returns: Rendered result.
-    public func render(_ document: Document, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil) -> RenderedMarkdown {
+    public func render(_ document: Document, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil, isStreaming: Bool = false) -> RenderedMarkdown {
         var parser = MarkdownParser(
             theme: theme,
             maxLayoutWidth: maxLayoutWidth,
             imageHandler: imageHandler,
             attachmentPool: attachmentPool,
-            codeBlockState: codeBlockState
+            codeBlockState: codeBlockState,
+            isStreaming: isStreaming
         )
-        let item = parser.parse(document)
+        
+        let item = MarkdownLogger.measure(.renderer, "render document") {
+            parser.parse(document)
+        }
+        
         return RenderedMarkdown(attributedString: item.attributedString, attachments: item.attachments)
     }
 

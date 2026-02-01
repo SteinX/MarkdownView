@@ -4,16 +4,18 @@ import UIKit
 /// Used by MarkdownView, QuoteView, and MarkdownTableView for consistent attachment layout.
 open class MarkdownTextView: UITextView {
     
-    public var attachmentViews: [Int: UIView] = [:] {
+    public var attachmentViews: [Int: AttachmentInfo] = [:] {
         didSet {
             // Remove old views
-            oldValue.values.forEach { $0.removeFromSuperview() }
+            oldValue.values.forEach { $0.view.removeFromSuperview() }
             // Add new views at bottom of z-order so selection stays on top
-            attachmentViews.values.forEach { view in
-                insertSubview(view, at: 0)
+            attachmentViews.values.forEach { info in
+                insertSubview(info.view, at: 0)
             }
+            setNeedsLayout()
         }
     }
+
     
     public override init(frame: CGRect, textContainer: NSTextContainer?) {
         // Force TextKit 1 to avoid "switching to compatibility mode" warnings
@@ -63,7 +65,8 @@ open class MarkdownTextView: UITextView {
     public override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         // Check attachment views first since they are inserted at 0 (behind text container)
         // We want them to receive touches if they are interactive (like MarkdownTableView)
-        for view in attachmentViews.values {
+        for info in attachmentViews.values {
+            let view = info.view
             // Convert point to view's local coordinate system
             let localPoint = view.convert(point, from: self)
             if view.point(inside: localPoint, with: event) {
@@ -83,7 +86,13 @@ open class MarkdownTextView: UITextView {
         // Ensure layout is complete
         layoutManager.ensureLayout(for: textContainer)
         
-        for (charIndex, view) in attachmentViews {
+        let attachmentCount = attachmentViews.count
+        if attachmentCount > 0 {
+            MarkdownLogger.verbose(.layout, "layoutSubviews positioning \(attachmentCount) attachments")
+        }
+        
+        for (charIndex, info) in attachmentViews {
+            let view = info.view
             guard charIndex < (attributedText?.length ?? 0) else { continue }
             
             // Find Glyph Index for Character
@@ -94,9 +103,11 @@ open class MarkdownTextView: UITextView {
 
             // Some attachment glyphs can report a zero rect; fall back to attachment bounds.
             if rect.size == .zero {
+                let lineFragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
                 let glyphLocation = layoutManager.location(forGlyphAt: glyphIndex)
                 let attachmentSize = (attributedText?.attribute(.attachment, at: charIndex, effectiveRange: nil) as? NSTextAttachment)?.bounds.size ?? .zero
-                rect = CGRect(origin: glyphLocation, size: attachmentSize)
+                let origin = CGPoint(x: lineFragmentRect.origin.x + glyphLocation.x, y: lineFragmentRect.origin.y)
+                rect = CGRect(origin: origin, size: attachmentSize)
             }
             
             // Convert Coordinates
@@ -113,8 +124,9 @@ open class MarkdownTextView: UITextView {
     
     /// Cleanup method for Cell reuse
     public func cleanUp() {
-        attachmentViews.values.forEach { $0.removeFromSuperview() }
+        attachmentViews.values.forEach { $0.view.removeFromSuperview() }
         attachmentViews.removeAll()
         attributedText = nil
     }
+
 }

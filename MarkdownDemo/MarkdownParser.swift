@@ -15,14 +15,14 @@ extension UIFont {
 
 struct MarkdownParseResult {
     let attributedString: NSAttributedString
-    let attachments: [Int: UIView] // Character Index -> View
+    let attachments: [Int: AttachmentInfo] // Character Index -> View
 }
 
 // MARK: - Main Parser
 
 struct MarkdownParser: MarkupWalker {
     private var attributedString = NSMutableAttributedString()
-    private var attachments: [Int: UIView] = [:]
+    private var attachments: [Int: AttachmentInfo] = [:]
     private let theme: MarkdownTheme
     private let maxLayoutWidth: CGFloat
     private var listDepth = 0
@@ -31,9 +31,10 @@ struct MarkdownParser: MarkupWalker {
     private let isInsideQuote: Bool
     private let attachmentPool: AttachmentPool?
     private let codeBlockState: CodeBlockAnalyzer.CodeBlockState?
+    private let isStreaming: Bool
     private var currentCodeBlockIndex: Int = 0
     
-    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil) {
+    init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil, isStreaming: Bool = false) {
         self.theme = theme
         self.maxLayoutWidth = maxLayoutWidth
         self.currentTextColor = theme.colors.text
@@ -41,16 +42,24 @@ struct MarkdownParser: MarkupWalker {
         self.isInsideQuote = isInsideQuote
         self.attachmentPool = attachmentPool
         self.codeBlockState = codeBlockState
+        self.isStreaming = isStreaming
     }
     
     mutating func parse(_ document: Document) -> MarkdownParseResult {
-        visit(document)
+        MarkdownLogger.measure(.parser, "parse document") {
+            visit(document)
+        }
+        
+        MarkdownLogger.info(.parser, "parse completed, length=\(attributedString.length), attachments=\(attachments.count)")
+        
         return MarkdownParseResult(attributedString: attributedString, attachments: attachments)
     }
     
     // MARK: - Visitors
     
     mutating func visitHeading(_ heading: Heading) {
+        MarkdownLogger.verbose(.parser, "visit heading level=\(heading.level)")
+        
         let level = heading.level
         let fonts = theme.headings.fonts
         let spacings = theme.headings.spacings
@@ -294,18 +303,26 @@ struct MarkdownParser: MarkupWalker {
     
     mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+
+        let contentKey = HorizontalRuleContentKey(
+            width: availableWidth,
+            isInsideQuote: isInsideQuote
+        )
         
         // Try to dequeue from pool
         let view: HorizontalRuleView
-        if let pool = attachmentPool, let pooledView = pool.dequeue(HorizontalRuleView.self) {
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (HorizontalRuleView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
-            view.update(theme: theme, width: availableWidth)
+            if !exactMatch {
+                view.update(theme: theme, width: availableWidth)
+            }
         } else {
             // Create new view
             view = HorizontalRuleView(theme: theme, width: availableWidth)
         }
         
-        insertAttachment(view: view, size: view.frame.size, isBlock: true)
+        insertAttachment(view: view, size: view.frame.size, isBlock: true, contentKey: contentKey)
     }
     
     mutating func visitImage(_ image: Image) {
@@ -326,11 +343,21 @@ struct MarkdownParser: MarkupWalker {
              size = CGSize(width: side, height: side)
         }
         
+        let contentKey = MarkdownImageContentKey(
+            url: url,
+            isDimmed: isInsideQuote,
+            width: size.width,
+            height: size.height
+        )
+
         // Try to dequeue from pool
         let view: MarkdownImageView
-        if let pool = attachmentPool, let pooledView = pool.dequeue(MarkdownImageView.self) {
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (MarkdownImageView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
-            view.update(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+            if !exactMatch {
+                view.update(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+            }
         } else {
             // Create new view
             view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
@@ -338,7 +365,7 @@ struct MarkdownParser: MarkupWalker {
         
         view.frame = CGRect(origin: .zero, size: size)
         
-        insertAttachment(view: view, size: size, isBlock: asBlock)
+        insertAttachment(view: view, size: size, isBlock: asBlock, contentKey: contentKey)
     }
     
     private var currentIndentationWidth: CGFloat {
@@ -349,6 +376,8 @@ struct MarkdownParser: MarkupWalker {
     }
     
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
+        MarkdownLogger.verbose(.parser, "visit codeBlock lang=\(codeBlock.language ?? "none")")
+        
         let code = codeBlock.code
         let language = codeBlock.language
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
@@ -359,11 +388,23 @@ struct MarkdownParser: MarkupWalker {
         
         currentCodeBlockIndex += 1
         
+        let contentKey = CodeBlockContentKey(
+            codeHash: code.hashValue,
+            codeLength: code.count,
+            language: language,
+            shouldHighlight: shouldHighlight,
+            width: availableWidth,
+            isInsideQuote: isInsideQuote
+        )
+
         // Try to dequeue from pool
         let view: CodeBlockView
-        if let pool = attachmentPool, let pooledView = pool.dequeue(CodeBlockView.self) {
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (CodeBlockView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
-            view.update(code: code, language: language, theme: theme, shouldHighlight: shouldHighlight)
+            if !exactMatch {
+                view.update(code: code, language: language, theme: theme, shouldHighlight: shouldHighlight)
+            }
         } else {
             // Create new view
             view = CodeBlockView(code: code, language: language, theme: theme)
@@ -384,10 +425,12 @@ struct MarkdownParser: MarkupWalker {
         let finalSize = CGSize(width: availableWidth, height: size.height)
         view.frame = CGRect(origin: .zero, size: finalSize)
         view.translatesAutoresizingMaskIntoConstraints = true
-        insertAttachment(view: view, size: finalSize, isBlock: true)
+        insertAttachment(view: view, size: finalSize, isBlock: true, contentKey: contentKey)
     }
     
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
+        MarkdownLogger.verbose(.parser, "visit blockQuote")
+        
         let padding: CGFloat = theme.quote.padding * 2 // Roughly padding left + padding right + borders
         
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
@@ -398,8 +441,9 @@ struct MarkdownParser: MarkupWalker {
             maxLayoutWidth: availableWidth - padding,
             imageHandler: imageHandler,
             isInsideQuote: true,
-            attachmentPool: attachmentPool,
-            codeBlockState: codeBlockState
+            attachmentPool: nil,
+            codeBlockState: codeBlockState,
+            isStreaming: isStreaming
         )
         
         for child in blockQuote.children {
@@ -408,8 +452,24 @@ struct MarkdownParser: MarkupWalker {
         
         let attributedText = childParser.attributedString
         let attachments = childParser.attachments
+
+        let contentKey = QuoteContentKey(
+            textHash: attributedText.string.hashValue,
+            attachmentsHash: attachmentsHash(attachments),
+            width: availableWidth,
+            isInsideQuote: isInsideQuote
+        )
         
-        let view = QuoteView(attributedText: attributedText, attachments: attachments, theme: theme)
+        let view: QuoteView
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (QuoteView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
+            view = pooledView
+            if !exactMatch {
+                view.update(attributedText: attributedText, attachments: attachments, theme: theme)
+            }
+        } else {
+            view = QuoteView(attributedText: attributedText, attachments: attachments, theme: theme)
+        }
         view.translatesAutoresizingMaskIntoConstraints = false
         view.preferredMaxLayoutWidth = availableWidth
         
@@ -427,40 +487,46 @@ struct MarkdownParser: MarkupWalker {
         view.frame = CGRect(origin: .zero, size: finalSize)
         view.preferredMaxLayoutWidth = nil
         view.translatesAutoresizingMaskIntoConstraints = true
-        insertAttachment(view: view, size: finalSize, isBlock: true)
+        insertAttachment(view: view, size: finalSize, isBlock: true, contentKey: contentKey)
     }
     
     mutating func visitTable(_ table: Table) {
-        func parseCell(_ cell: Markup) -> (NSAttributedString, [Int: UIView]) {
-             var parser = InlineParser(
+        let cellsArray = Array(table.head.cells)
+        let rowsArray = Array(table.body.rows)
+        MarkdownLogger.verbose(.parser, "visit table cols=\(cellsArray.count), rows=\(rowsArray.count)")
+        
+        func parseCell(_ cell: Markup) -> (NSAttributedString, [Int: AttachmentInfo]) {
+            var parser = InlineParser(
                 theme: theme,
                 baseFont: theme.baseFont,
                 imageHandler: imageHandler,
                 isInsideQuote: isInsideQuote,
-                attachmentPool: attachmentPool
-             )
-             parser.visit(cell)
-             return (parser.attributedString, parser.attachments)
+                attachmentPool: nil,
+                isStreaming: isStreaming
+            )
+            parser.visit(cell)
+            return (parser.attributedString, parser.attachments)
         }
         
-        var headerItems: [(NSAttributedString, [Int: UIView])] = []
+        var headerItems: [(NSAttributedString, [Int: AttachmentInfo])] = []
         let boldFont = theme.baseFont.withTraits(.traitBold)
         
         for cell in table.head.cells {
-             var parser = InlineParser(
+            var parser = InlineParser(
                 theme: theme,
                 baseFont: boldFont,
                 imageHandler: imageHandler,
                 isInsideQuote: isInsideQuote,
-                attachmentPool: attachmentPool
-             )
-             parser.visit(cell)
-             headerItems.append((parser.attributedString, parser.attachments))
+                attachmentPool: nil,
+                isStreaming: isStreaming
+            )
+            parser.visit(cell)
+            headerItems.append((parser.attributedString, parser.attachments))
         }
         
-        var rowItems: [[(NSAttributedString, [Int: UIView])]] = []
+        var rowItems: [[(NSAttributedString, [Int: AttachmentInfo])]] = []
         for row in table.body.rows {
-            var items: [(NSAttributedString, [Int: UIView])] = []
+            var items: [(NSAttributedString, [Int: AttachmentInfo])] = []
             for cell in row.cells {
                 items.append(parseCell(cell))
             }
@@ -480,16 +546,32 @@ struct MarkdownParser: MarkupWalker {
             theme: theme,
             maxWidth: availableWidth
         )
-        
-        let view = MarkdownTableView(
-            headers: headerItems,
-            rows: rowItems,
-            theme: theme,
-            maxLayoutWidth: availableWidth
+
+        let dataHash = tableDataHash(headers: headerItems, rows: rowItems)
+        let contentKey = MarkdownTableContentKey(
+            dataHash: dataHash,
+            width: availableWidth,
+            isInsideQuote: isInsideQuote
         )
         
+        let view: MarkdownTableView
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (MarkdownTableView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
+            view = pooledView
+            if !exactMatch {
+                view.update(headers: headerItems, rows: rowItems, theme: theme, maxLayoutWidth: availableWidth)
+            }
+        } else {
+            view = MarkdownTableView(
+                headers: headerItems,
+                rows: rowItems,
+                theme: theme,
+                maxLayoutWidth: availableWidth
+            )
+        }
+        
         view.frame = CGRect(origin: .zero, size: size)
-        insertAttachment(view: view, size: size, isBlock: true)
+        insertAttachment(view: view, size: size, isBlock: true, contentKey: contentKey)
     }
     
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
@@ -520,7 +602,7 @@ struct MarkdownParser: MarkupWalker {
         attributedString.addAttributes(attributes, range: NSRange(location: start, length: attributedString.length - start))
     }
     
-    private mutating func insertAttachment(view: UIView, size: CGSize, isBlock: Bool) {
+    private mutating func insertAttachment(view: UIView, size: CGSize, isBlock: Bool, contentKey: AnyHashable) {
         let renderer = UIGraphicsImageRenderer(size: size)
         let image = renderer.image { _ in }
         
@@ -542,11 +624,44 @@ struct MarkdownParser: MarkupWalker {
         attributedString.append(NSAttributedString(attachment: attachment))
         attributedString.addAttributes(attributes, range: NSRange(location: location, length: 1))
         
-        attachments[location] = view
+        attachments[location] = AttachmentInfo(view: view, contentKey: AnyHashable(contentKey), charPosition: location)
         
         if isBlock {
             attributedString.append(NSAttributedString(string: "\n", attributes: attributes))
         }
+    }
+
+    private func attachmentsHash(_ attachments: [Int: AttachmentInfo]) -> Int {
+        var hasher = Hasher()
+        for (index, info) in attachments.sorted(by: { $0.key < $1.key }) {
+            hasher.combine(index)
+            hasher.combine(info.contentKey)
+        }
+        return hasher.finalize()
+    }
+
+    private func tableDataHash(
+        headers: [(NSAttributedString, [Int: AttachmentInfo])],
+        rows: [[(NSAttributedString, [Int: AttachmentInfo])]]
+    ) -> Int {
+        var hasher = Hasher()
+        hasher.combine(headers.count)
+        hasher.combine(rows.count)
+
+        for header in headers {
+            hasher.combine(header.0.string.hashValue)
+            hasher.combine(attachmentsHash(header.1))
+        }
+
+        for row in rows {
+            hasher.combine(row.count)
+            for cell in row {
+                hasher.combine(cell.0.string.hashValue)
+                hasher.combine(attachmentsHash(cell.1))
+            }
+        }
+
+        return hasher.finalize()
     }
 }
 
@@ -554,20 +669,22 @@ struct MarkdownParser: MarkupWalker {
 
 struct InlineParser: MarkupWalker {
     var attributedString = NSMutableAttributedString()
-    var attachments: [Int: UIView] = [:]
+    var attachments: [Int: AttachmentInfo] = [:]
     
     let theme: MarkdownTheme
     let baseFont: UIFont
     let imageHandler: MarkdownImageHandler
     let isInsideQuote: Bool
     let attachmentPool: AttachmentPool?
+    let isStreaming: Bool
     
-    init(theme: MarkdownTheme, baseFont: UIFont, imageHandler: MarkdownImageHandler? = nil, isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil) {
+    init(theme: MarkdownTheme, baseFont: UIFont, imageHandler: MarkdownImageHandler? = nil, isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, isStreaming: Bool = false) {
         self.theme = theme
         self.baseFont = baseFont
         self.imageHandler = imageHandler ?? DefaultImageHandler()
         self.isInsideQuote = isInsideQuote
         self.attachmentPool = attachmentPool
+        self.isStreaming = isStreaming
     }
     
     mutating func visitText(_ text: Text) {
@@ -584,11 +701,21 @@ struct InlineParser: MarkupWalker {
         let side = theme.images.inlineSize
         let size = CGSize(width: side, height: side)
         
+        let contentKey = MarkdownImageContentKey(
+            url: url,
+            isDimmed: isInsideQuote,
+            width: size.width,
+            height: size.height
+        )
+
         // Try to dequeue from pool
         let view: MarkdownImageView
-        if let pool = attachmentPool, let pooledView = pool.dequeue(MarkdownImageView.self) {
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (MarkdownImageView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
-            view.update(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+            if !exactMatch {
+                view.update(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
+            }
         } else {
             // Create new view
             view = MarkdownImageView(url: url, imageHandler: imageHandler, theme: theme, isDimmed: isInsideQuote)
@@ -613,7 +740,7 @@ struct InlineParser: MarkupWalker {
         attrAttachment.addAttributes(attributes, range: NSRange(location: 0, length: 1))
         
         attributedString.append(attrAttachment)
-        attachments[location] = view
+        attachments[location] = AttachmentInfo(view: view, contentKey: AnyHashable(contentKey), charPosition: location)
     }
     
     mutating func visitStrong(_ strong: Strong) {

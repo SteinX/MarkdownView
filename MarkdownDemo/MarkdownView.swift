@@ -23,6 +23,8 @@ open class MarkdownView: MarkdownTextView {
     /// Enable streaming mode to throttle render updates and reduce CPU usage
     public var isStreaming: Bool = false {
         didSet {
+            MarkdownLogger.info(.streaming, "streaming state changed -> \(isStreaming)")
+            _attachmentPool.logStats(context: "streaming toggle")
             if !isStreaming && oldValue {
                 // Stream ended: cleanup timer and ensure final render
                 finalizeStreamingRender()
@@ -72,7 +74,8 @@ open class MarkdownView: MarkdownTextView {
     
     private var lastRenderedWidth: CGFloat = 0
     private var cachedDocument: Document?
-    private let attachmentPool = AttachmentPool.shared
+    private let _attachmentPool = AttachmentPool()
+    private var lastRenderWasStreaming: Bool = false
     
     // Streaming throttle state
     private var pendingMarkdown: String?
@@ -128,6 +131,10 @@ open class MarkdownView: MarkdownTextView {
                 render(with: width)
             }
         }
+
+        if preferredMaxLayoutWidth > 0 {
+            textContainer.size = CGSize(width: preferredMaxLayoutWidth, height: .greatestFiniteMagnitude)
+        }
         
         // Call super AFTER render so attachmentViews are set
         super.layoutSubviews()
@@ -142,16 +149,29 @@ open class MarkdownView: MarkdownTextView {
     private func render(with width: CGFloat) {
             lastRenderedWidth = width
         
+        MarkdownLogger.info(.view, "render started, width=\(Int(width)), streaming=\(isStreaming)")
+        
         // Set text container width for correct intrinsic size calculation
         // IMPORTANT: Must set height to large value to allow layout manager to calculate used rect
         textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         
         // Recycle old attachments back to pool
-        attachmentViews.values.forEach { view in
-            view.removeFromSuperview()
-            attachmentPool.recycle(view)
+        if !attachmentViews.isEmpty {
+            MarkdownLogger.debug(.pool, "recycle attachments count=\(attachmentViews.count)")
+        }
+        let recycleToStreamingPool = lastRenderWasStreaming
+        lastRenderWasStreaming = isStreaming
+        _attachmentPool.logStats(context: "before recycle")
+
+        let maxPosition = attachmentViews.keys.max() ?? -1
+        attachmentViews.forEach { position, info in
+            let isTrailing = recycleToStreamingPool && position == maxPosition
+
+            info.view.removeFromSuperview()
+            _attachmentPool.recycle(info.view, anyKey: info.contentKey, isStreaming: isTrailing)
         }
         attachmentViews.removeAll()
+        _attachmentPool.logStats(context: "after recycle")
         
         if markdown.isEmpty {
             attributedText = nil
@@ -167,12 +187,12 @@ open class MarkdownView: MarkdownTextView {
         let result: RenderedMarkdown
         if let document = cachedDocument {
             // Reuse cached AST
-            result = renderer.render(document, attachmentPool: attachmentPool, codeBlockState: codeBlockState)
+            result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         } else {
             // Parse and cache
             let document = renderer.parse(markdown)
             cachedDocument = document
-            result = renderer.render(document, attachmentPool: attachmentPool, codeBlockState: codeBlockState)
+            result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         }
         
         attributedText = result.attributedString
@@ -183,9 +203,12 @@ open class MarkdownView: MarkdownTextView {
         layoutManager.ensureLayout(for: textContainer)
         
         attachmentViews = result.attachments
+        _attachmentPool.logStats(context: "after render")
         
         // Force intrinsic size recalculation
         invalidateIntrinsicContentSize()
+        
+        MarkdownLogger.debug(.view, "render completed, attachments=\(result.attachments.count)")
     }
     
     // MARK: - Streaming Throttle
@@ -252,5 +275,19 @@ open class MarkdownView: MarkdownTextView {
         throttleTimer?.invalidate()
         throttleTimer = nil
         pendingMarkdown = nil
+        lastRenderWasStreaming = false
+    }
+
+}
+
+// MARK: - Logging Configuration
+
+extension MarkdownView {
+    /// 全局日志级别配置
+    /// 默认为 .off (关闭)
+    /// 设置为 .debug 可启用性能计时
+    public static var logLevel: MarkdownLogLevel {
+        get { MarkdownLogger.level }
+        set { MarkdownLogger.level = newValue }
     }
 }
