@@ -22,6 +22,11 @@ let package = Package(
                 .product(name: "Markdown", package: "swift-markdown")
             ],
             path: "Sources/STXMarkdownView"
+        ),
+        .testTarget(
+            name: "STXMarkdownViewTests",
+            dependencies: ["STXMarkdownView"],
+            path: "Tests/STXMarkdownViewTests"
         )
     ]
 )
