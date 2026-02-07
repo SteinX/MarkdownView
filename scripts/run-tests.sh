@@ -10,8 +10,6 @@ fi
 
 cd "$ROOT_DIR"
 
-PACKAGE_DIR="$ROOT_DIR/STXMarkdownView"
-
 detect_simulator() {
   local available_sims
   available_sims=$(xcrun simctl list devices available 2>/dev/null | grep -E "iPhone.*\(.*\)" | head -1)
@@ -27,10 +25,9 @@ detect_simulator() {
 SIMULATOR_NAME="${SIMULATOR_NAME:-$(detect_simulator)}"
 echo "Using simulator: $SIMULATOR_NAME"
 
-cd "$PACKAGE_DIR"
 xcodebuild test \
-  -scheme STXMarkdownView \
+  -project MarkdownDemo.xcodeproj \
+  -scheme STXMarkdownViewPackageTests \
   -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
-  -derivedDataPath "$ROOT_DIR/.build/DerivedData-STXMarkdownView" \
   CODE_SIGNING_ALLOWED=NO \
   2>&1
