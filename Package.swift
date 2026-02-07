@@ -22,7 +22,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Markdown", package: "swift-markdown")
             ],
-            path: "Sources/STXMarkdownView"
+            path: "STXMarkdownView/Sources/STXMarkdownView"
         ),
         .testTarget(
             name: "STXMarkdownViewTests",
@@ -30,7 +30,7 @@ let package = Package(
                 "STXMarkdownView",
                 .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
             ],
-            path: "Tests/STXMarkdownViewTests"
+            path: "STXMarkdownView/Tests/STXMarkdownViewTests"
         )
     ]
 )

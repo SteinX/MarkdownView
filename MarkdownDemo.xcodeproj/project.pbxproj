@@ -7,11 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		9A1111112F10000100000001 /* STXMarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1111112F10000100000002 /* STXMarkdownView */; };
-		D1EEC786FA6E45628C38773C /* MarkdownDemoSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FBC8662C8C4EE0860867C6 /* MarkdownDemoSnapshotTests.swift */; };
-		01644F292A894848B754315F /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */; };
-		A5E780C46CBD46F6AD8F5FCB /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
-		9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
+	9A1111112F10000100000001 /* STXMarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1111112F10000100000002 /* STXMarkdownView */; };
+	D1EEC786FA6E45628C38773C /* MarkdownDemoSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FBC8662C8C4EE0860867C6 /* MarkdownDemoSnapshotTests.swift */; };
+	01644F292A894848B754315F /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */; };
+	A5E780C46CBD46F6AD8F5FCB /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
+	9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
+	CD0000000000000000000001 /* Markdown in Frameworks */ = {isa = PBXBuildFile; productRef = CD0000000000000000000002 /* Markdown */; };
 		AB0000000000000000000001 /* InlineParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000019 /* InlineParserTests.swift */; };
 		AB0000000000000000000002 /* MarkdownParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000020 /* MarkdownParserTests.swift */; };
 		AB0000000000000000000003 /* MarkdownRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000021 /* MarkdownRendererTests.swift */; };
@@ -107,6 +108,7 @@
 				AB0000000000000000000037 /* STXMarkdownView in Frameworks */,
 				AB0000000000000000000038 /* SnapshotTesting in Frameworks */,
 				AB0000000000000000000039 /* Highlightr in Frameworks */,
+				CD0000000000000000000001 /* Markdown in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -321,6 +323,7 @@
 				9A1111112F10000100000002 /* STXMarkdownView */,
 				719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */,
 				9AE25AB12F04BDE400E3DD5B /* Highlightr */,
+				CD0000000000000000000002 /* Markdown */,
 			);
 			productName = STXMarkdownViewPackageTests;
 			productReference = AB0000000000000000000040 /* STXMarkdownViewPackageTests.xctest */;
@@ -716,7 +719,7 @@
 /* Begin XCLocalSwiftPackageReference section */
 		9A1111112F10000100000003 /* XCLocalSwiftPackageReference "STXMarkdownView" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = STXMarkdownView;
+			relativePath = .;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -754,6 +757,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7103A5D2424949E6A138ECF7 /* XCRemoteSwiftPackageReference "SnapshotTesting" */;
 			productName = SnapshotTesting;
+		};
+		CD0000000000000000000002 /* Markdown */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A1111112F10000100000003 /* XCLocalSwiftPackageReference "STXMarkdownView" */;
+			productName = Markdown;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
