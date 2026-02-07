@@ -1,11 +1,11 @@
-# iOS Markdown Demo
+# MarkdownView
 
 A high-performance Markdown rendering solution for iOS, featuring **STXMarkdownView** — a UITextView-based component optimized for chat-style UI with streaming support.
 
 ## Project Structure
 
 ```
-ios-markdown-demo/
+MarkdownView/
 ├── STXMarkdownView/          # Swift Package - Core Markdown rendering library
 │   ├── Sources/
 │   │   └── STXMarkdownView/
@@ -47,21 +47,21 @@ ios-markdown-demo/
 In Xcode: File → Add Package Dependencies → Enter the repository URL:
 
 ```
-https://github.com/your-org/ios-markdown-demo
+https://github.com/SteinX/MarkdownView
 ```
 
 Or add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/your-org/ios-markdown-demo", from: "1.0.0")
+    .package(url: "https://github.com/SteinX/MarkdownView", from: "1.0.0")
 ]
 
 // Then add to target dependencies:
 .target(
     name: "YourApp",
     dependencies: [
-        .product(name: "STXMarkdownView", package: "ios-markdown-demo")
+        .product(name: "STXMarkdownView", package: "MarkdownView")
     ]
 )
 ```
