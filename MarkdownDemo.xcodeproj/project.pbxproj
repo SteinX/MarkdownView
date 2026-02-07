@@ -8,11 +8,56 @@
 
 /* Begin PBXBuildFile section */
 		9A1111112F10000100000001 /* STXMarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1111112F10000100000002 /* STXMarkdownView */; };
+		D1EEC786FA6E45628C38773C /* MarkdownDemoSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6FBC8662C8C4EE0860867C6 /* MarkdownDemoSnapshotTests.swift */; };
+		01644F292A894848B754315F /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */; };
+		A5E780C46CBD46F6AD8F5FCB /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
 		9AE25AB22F04BDE400E3DD5B /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
+		AB0000000000000000000001 /* InlineParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000019 /* InlineParserTests.swift */; };
+		AB0000000000000000000002 /* MarkdownParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000020 /* MarkdownParserTests.swift */; };
+		AB0000000000000000000003 /* MarkdownRendererTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000021 /* MarkdownRendererTests.swift */; };
+		AB0000000000000000000004 /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000022 /* TestHelpers.swift */; };
+		AB0000000000000000000005 /* MarkdownViewIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000023 /* MarkdownViewIntegrationTests.swift */; };
+		AB0000000000000000000006 /* StreamingRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000024 /* StreamingRenderTests.swift */; };
+		AB0000000000000000000007 /* MarkdownViewSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000025 /* MarkdownViewSnapshotTests.swift */; };
+		AB0000000000000000000008 /* MarkdownThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000026 /* MarkdownThemeTests.swift */; };
+		AB0000000000000000000009 /* AttachmentContentKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000027 /* AttachmentContentKeyTests.swift */; };
+		AB0000000000000000000010 /* AttachmentPoolTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000028 /* AttachmentPoolTests.swift */; };
+		AB0000000000000000000011 /* CodeBlockAnalyzerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000029 /* CodeBlockAnalyzerTests.swift */; };
+		AB0000000000000000000012 /* ImageCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000030 /* ImageCacheTests.swift */; };
+		AB0000000000000000000013 /* MarkdownLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000031 /* MarkdownLoggerTests.swift */; };
+		AB0000000000000000000014 /* TableCellSizeCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000032 /* TableCellSizeCacheTests.swift */; };
+		AB0000000000000000000015 /* CodeBlockViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000033 /* CodeBlockViewTests.swift */; };
+		AB0000000000000000000016 /* MarkdownImageViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000034 /* MarkdownImageViewTests.swift */; };
+		AB0000000000000000000017 /* MarkdownTableViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000035 /* MarkdownTableViewTests.swift */; };
+		AB0000000000000000000018 /* QuoteViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000036 /* QuoteViewTests.swift */; };
+		AB0000000000000000000037 /* STXMarkdownView in Frameworks */ = {isa = PBXBuildFile; productRef = 9A1111112F10000100000002 /* STXMarkdownView */; };
+		AB0000000000000000000038 /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */; };
+		AB0000000000000000000039 /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = 9AE25AB12F04BDE400E3DD5B /* Highlightr */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		9AC0C2972EF70E5100390CE2 /* MarkdownDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MarkdownDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		52A66AE1B3BF4433963632C7 /* MarkdownDemoSnapshotTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MarkdownDemoSnapshotTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E6FBC8662C8C4EE0860867C6 /* MarkdownDemoSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownDemoSnapshotTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000040 /* STXMarkdownViewPackageTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = STXMarkdownViewPackageTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB0000000000000000000019 /* InlineParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineParserTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000020 /* MarkdownParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownParserTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000021 /* MarkdownRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRendererTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000022 /* TestHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHelpers.swift; sourceTree = "<group>"; };
+		AB0000000000000000000023 /* MarkdownViewIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownViewIntegrationTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000024 /* StreamingRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingRenderTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000025 /* MarkdownViewSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownViewSnapshotTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000026 /* MarkdownThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownThemeTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000027 /* AttachmentContentKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentContentKeyTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000028 /* AttachmentPoolTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentPoolTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000029 /* CodeBlockAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockAnalyzerTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000030 /* ImageCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000031 /* MarkdownLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownLoggerTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000032 /* TableCellSizeCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableCellSizeCacheTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000033 /* CodeBlockViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockViewTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000034 /* MarkdownImageViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownImageViewTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000035 /* MarkdownTableViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTableViewTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000036 /* QuoteViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteViewTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -46,13 +91,64 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BF14D4CE93244F24B789C81C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01644F292A894848B754315F /* SnapshotTesting in Frameworks */,
+				A5E780C46CBD46F6AD8F5FCB /* Highlightr in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB0000000000000000000041 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB0000000000000000000037 /* STXMarkdownView in Frameworks */,
+				AB0000000000000000000038 /* SnapshotTesting in Frameworks */,
+				AB0000000000000000000039 /* Highlightr in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXContainerItemProxy section */
+		B524656DBB354CA59C94C8E4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9AC0C28F2EF70E5100390CE2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9AC0C2962EF70E5100390CE2;
+			remoteInfo = MarkdownDemo;
+		};
+		AB0000000000000000000042 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9AC0C28F2EF70E5100390CE2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9AC0C2962EF70E5100390CE2;
+			remoteInfo = MarkdownDemo;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		5C572893B8BB4B8B8D1A4DFC /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9AC0C2962EF70E5100390CE2 /* MarkdownDemo */;
+			targetProxy = B524656DBB354CA59C94C8E4 /* PBXContainerItemProxy */;
+		};
+		AB0000000000000000000043 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9AC0C2962EF70E5100390CE2 /* MarkdownDemo */;
+			targetProxy = AB0000000000000000000042 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXGroup section */
 		9AC0C28E2EF70E5100390CE2 = {
 			isa = PBXGroup;
 			children = (
 				9AC0C2992EF70E5100390CE2 /* MarkdownDemo */,
+				0D5DD8A7A0D6472CB00B53C9 /* MarkdownDemoSnapshotTests */,
+				AB0000000000000000000044 /* STXMarkdownViewPackageTests */,
 				9AC0C2982EF70E5100390CE2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,8 +157,100 @@
 			isa = PBXGroup;
 			children = (
 				9AC0C2972EF70E5100390CE2 /* MarkdownDemo.app */,
+				52A66AE1B3BF4433963632C7 /* MarkdownDemoSnapshotTests.xctest */,
+				AB0000000000000000000040 /* STXMarkdownViewPackageTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		0D5DD8A7A0D6472CB00B53C9 /* MarkdownDemoSnapshotTests */ = {
+			isa = PBXGroup;
+			children = (
+				E6FBC8662C8C4EE0860867C6 /* MarkdownDemoSnapshotTests.swift */,
+			);
+			path = MarkdownDemoSnapshotTests;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000044 /* STXMarkdownViewPackageTests */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000045 /* Core */,
+				AB0000000000000000000046 /* Helpers */,
+				AB0000000000000000000047 /* Integration */,
+				AB0000000000000000000048 /* Snapshot */,
+				AB0000000000000000000049 /* Theme */,
+				AB0000000000000000000050 /* Utils */,
+				AB0000000000000000000051 /* Views */,
+			);
+			name = STXMarkdownViewPackageTests;
+			path = STXMarkdownView/Tests/STXMarkdownViewTests;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000045 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000019 /* InlineParserTests.swift */,
+				AB0000000000000000000020 /* MarkdownParserTests.swift */,
+				AB0000000000000000000021 /* MarkdownRendererTests.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000046 /* Helpers */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000022 /* TestHelpers.swift */,
+			);
+			path = Helpers;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000047 /* Integration */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000023 /* MarkdownViewIntegrationTests.swift */,
+				AB0000000000000000000024 /* StreamingRenderTests.swift */,
+			);
+			path = Integration;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000048 /* Snapshot */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000025 /* MarkdownViewSnapshotTests.swift */,
+			);
+			path = Snapshot;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000049 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000026 /* MarkdownThemeTests.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000050 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000027 /* AttachmentContentKeyTests.swift */,
+				AB0000000000000000000028 /* AttachmentPoolTests.swift */,
+				AB0000000000000000000029 /* CodeBlockAnalyzerTests.swift */,
+				AB0000000000000000000030 /* ImageCacheTests.swift */,
+				AB0000000000000000000031 /* MarkdownLoggerTests.swift */,
+				AB0000000000000000000032 /* TableCellSizeCacheTests.swift */,
+			);
+			path = Utils;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000051 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000033 /* CodeBlockViewTests.swift */,
+				AB0000000000000000000034 /* MarkdownImageViewTests.swift */,
+				AB0000000000000000000035 /* MarkdownTableViewTests.swift */,
+				AB0000000000000000000036 /* QuoteViewTests.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -92,6 +280,52 @@
 			productReference = 9AC0C2972EF70E5100390CE2 /* MarkdownDemo.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E7A896DF50B44D618FDA70CB /* MarkdownDemoSnapshotTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00B579821E1844B6A9231459 /* Build configuration list for PBXNativeTarget "MarkdownDemoSnapshotTests" */;
+			buildPhases = (
+				C1A1CFA6A76C41D9A99AD508 /* Sources */,
+				BF14D4CE93244F24B789C81C /* Frameworks */,
+				2A5529D9AC774C928805D6CA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5C572893B8BB4B8B8D1A4DFC /* PBXTargetDependency */,
+			);
+			name = MarkdownDemoSnapshotTests;
+			packageProductDependencies = (
+				719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */,
+				9AE25AB12F04BDE400E3DD5B /* Highlightr */,
+				9A1111112F10000100000002 /* STXMarkdownView */,
+			);
+			productName = MarkdownDemoSnapshotTests;
+			productReference = 52A66AE1B3BF4433963632C7 /* MarkdownDemoSnapshotTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		AB0000000000000000000052 /* STXMarkdownViewPackageTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB0000000000000000000053 /* Build configuration list for PBXNativeTarget "STXMarkdownViewPackageTests" */;
+			buildPhases = (
+				AB0000000000000000000054 /* Sources */,
+				AB0000000000000000000041 /* Frameworks */,
+				AB0000000000000000000055 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AB0000000000000000000043 /* PBXTargetDependency */,
+			);
+			name = STXMarkdownViewPackageTests;
+			packageProductDependencies = (
+				9A1111112F10000100000002 /* STXMarkdownView */,
+				719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */,
+				9AE25AB12F04BDE400E3DD5B /* Highlightr */,
+			);
+			productName = STXMarkdownViewPackageTests;
+			productReference = AB0000000000000000000040 /* STXMarkdownViewPackageTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -101,11 +335,17 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 2610;
-				TargetAttributes = {
-					9AC0C2962EF70E5100390CE2 = {
-						CreatedOnToolsVersion = 26.1;
-					};
+			TargetAttributes = {
+				9AC0C2962EF70E5100390CE2 = {
+					CreatedOnToolsVersion = 26.1;
 				};
+				E7A896DF50B44D618FDA70CB = {
+					CreatedOnToolsVersion = 26.1;
+				};
+				AB0000000000000000000052 = {
+					CreatedOnToolsVersion = 26.1;
+				};
+			};
 			};
 			buildConfigurationList = 9AC0C2922EF70E5100390CE2 /* Build configuration list for PBXProject "MarkdownDemo" */;
 			developmentRegion = en;
@@ -119,19 +359,36 @@
 			packageReferences = (
 				9A1111112F10000100000003 /* XCLocalSwiftPackageReference "STXMarkdownView" */,
 				9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */,
+				7103A5D2424949E6A138ECF7 /* XCRemoteSwiftPackageReference "SnapshotTesting" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9AC0C2982EF70E5100390CE2 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
-				9AC0C2962EF70E5100390CE2 /* MarkdownDemo */,
-			);
-		};
+		targets = (
+			9AC0C2962EF70E5100390CE2 /* MarkdownDemo */,
+			E7A896DF50B44D618FDA70CB /* MarkdownDemoSnapshotTests */,
+			AB0000000000000000000052 /* STXMarkdownViewPackageTests */,
+		);
+			};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		9AC0C2952EF70E5100390CE2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		2A5529D9AC774C928805D6CA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB0000000000000000000055 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -148,9 +405,90 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C1A1CFA6A76C41D9A99AD508 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1EEC786FA6E45628C38773C /* MarkdownDemoSnapshotTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB0000000000000000000054 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB0000000000000000000001 /* InlineParserTests.swift in Sources */,
+				AB0000000000000000000002 /* MarkdownParserTests.swift in Sources */,
+				AB0000000000000000000003 /* MarkdownRendererTests.swift in Sources */,
+				AB0000000000000000000004 /* TestHelpers.swift in Sources */,
+				AB0000000000000000000005 /* MarkdownViewIntegrationTests.swift in Sources */,
+				AB0000000000000000000006 /* StreamingRenderTests.swift in Sources */,
+				AB0000000000000000000007 /* MarkdownViewSnapshotTests.swift in Sources */,
+				AB0000000000000000000008 /* MarkdownThemeTests.swift in Sources */,
+				AB0000000000000000000009 /* AttachmentContentKeyTests.swift in Sources */,
+				AB0000000000000000000010 /* AttachmentPoolTests.swift in Sources */,
+				AB0000000000000000000011 /* CodeBlockAnalyzerTests.swift in Sources */,
+				AB0000000000000000000012 /* ImageCacheTests.swift in Sources */,
+				AB0000000000000000000013 /* MarkdownLoggerTests.swift in Sources */,
+				AB0000000000000000000014 /* TableCellSizeCacheTests.swift in Sources */,
+				AB0000000000000000000015 /* CodeBlockViewTests.swift in Sources */,
+				AB0000000000000000000016 /* MarkdownImageViewTests.swift in Sources */,
+				AB0000000000000000000017 /* MarkdownTableViewTests.swift in Sources */,
+				AB0000000000000000000018 /* QuoteViewTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		00ACF507B7F642818ADBAE9B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stxprod.MarkdownDemoSnapshotTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MarkdownDemo;
+			};
+			name = Debug;
+		};
+		C4D62E35342346319D4F7BC9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stxprod.MarkdownDemoSnapshotTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = MarkdownDemo;
+			};
+			name = Release;
+		};
+		AB0000000000000000000056 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stxprod.STXMarkdownViewPackageTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MarkdownDemo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MarkdownDemo";
+			};
+			name = Debug;
+		};
+		AB0000000000000000000057 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stxprod.STXMarkdownViewPackageTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MarkdownDemo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MarkdownDemo";
+			};
+			name = Release;
+		};
 		9AC0C2AB2EF70E5400390CE2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -355,6 +693,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		00B579821E1844B6A9231459 /* Build configuration list for PBXNativeTarget "MarkdownDemoSnapshotTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00ACF507B7F642818ADBAE9B /* Debug */,
+				C4D62E35342346319D4F7BC9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB0000000000000000000053 /* Build configuration list for PBXNativeTarget "STXMarkdownViewPackageTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000056 /* Debug */,
+				AB0000000000000000000057 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -373,6 +729,14 @@
 				minimumVersion = 2.3.0;
 			};
 		};
+		7103A5D2424949E6A138ECF7 /* XCRemoteSwiftPackageReference "SnapshotTesting" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-snapshot-testing";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.12.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -385,6 +749,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9AE25AB02F04BDE400E3DD5B /* XCRemoteSwiftPackageReference "Highlightr" */;
 			productName = Highlightr;
+		};
+		719BB93BA6B94ECFAF21B3AD /* SnapshotTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7103A5D2424949E6A138ECF7 /* XCRemoteSwiftPackageReference "SnapshotTesting" */;
+			productName = SnapshotTesting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
