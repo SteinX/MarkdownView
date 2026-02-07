@@ -66,6 +66,23 @@ dependencies: [
 )
 ```
 
+**CocoaPods**
+
+Add to your `Podfile`:
+
+```ruby
+pod 'STXMarkdownView', :git => 'https://github.com/SteinX/MarkdownView.git'
+
+# Or specify a tag/branch
+pod 'STXMarkdownView', :git => 'https://github.com/SteinX/MarkdownView.git', :tag => '1.0.0'
+```
+
+Then run:
+
+```bash
+pod install
+```
+
 ### 2. Basic Usage
 
 ```swift

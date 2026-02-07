@@ -51,3 +51,7 @@ playground.xcworkspace
 
 buildServer.json
 .vscode/
+
+# AI Agent files
+AGENTS.md
+**/AGENTS.md
