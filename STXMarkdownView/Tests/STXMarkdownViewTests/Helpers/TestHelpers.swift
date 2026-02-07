@@ -91,6 +91,76 @@ func makeTestTheme() -> MarkdownTheme {
     )
 }
 
+func makeDarkTestTheme() -> MarkdownTheme {
+    let baseFont = UIFont.systemFont(ofSize: 14)
+    let colors = MarkdownTheme.LayoutColors(
+        text: UIColor(red: 0.92, green: 0.92, blue: 0.94, alpha: 1),
+        secondaryText: UIColor(red: 0.75, green: 0.75, blue: 0.78, alpha: 1),
+        background: UIColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1)
+    )
+    let headings = MarkdownTheme.HeadingTheme(
+        fonts: [
+            .boldSystemFont(ofSize: 22),
+            .boldSystemFont(ofSize: 20),
+            .boldSystemFont(ofSize: 18),
+            .boldSystemFont(ofSize: 16),
+            .boldSystemFont(ofSize: 15),
+            .boldSystemFont(ofSize: 14)
+        ],
+        spacings: [16, 12, 10, 8, 8, 8]
+    )
+    let code = MarkdownTheme.CodeBlockTheme(
+        font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+        backgroundColor: UIColor(red: 0.16, green: 0.16, blue: 0.18, alpha: 1),
+        textColor: UIColor(red: 0.9, green: 0.9, blue: 0.92, alpha: 1),
+        headerColor: UIColor(red: 0.22, green: 0.22, blue: 0.24, alpha: 1),
+        languageLabelFont: .systemFont(ofSize: 11, weight: .medium),
+        languageLabelColor: UIColor(red: 0.75, green: 0.75, blue: 0.78, alpha: 1),
+        syntaxHighlightTheme: "atom-one-dark",
+        isScrollable: false
+    )
+    let quote = MarkdownTheme.QuoteTheme(
+        textColor: UIColor(red: 0.82, green: 0.82, blue: 0.84, alpha: 1),
+        backgroundColor: UIColor(red: 0.18, green: 0.18, blue: 0.2, alpha: 1),
+        borderColor: UIColor(red: 0.35, green: 0.35, blue: 0.38, alpha: 1)
+    )
+    let lists = MarkdownTheme.ListTheme(
+        baseFont: baseFont,
+        spacing: 4,
+        indentStep: 18,
+        markerSpacing: 22,
+        bulletMarkers: ["-", "*", "+"],
+        checkboxCheckedImage: nil,
+        checkboxUncheckedImage: nil,
+        checkboxColor: UIColor(red: 0.4, green: 0.6, blue: 0.9, alpha: 1)
+    )
+    let tables = MarkdownTheme.TableTheme(
+        borderColor: UIColor(red: 0.3, green: 0.3, blue: 0.34, alpha: 1),
+        headerColor: UIColor(red: 0.18, green: 0.18, blue: 0.2, alpha: 1),
+        minColumnWidth: 40,
+        columnDistribution: .automatic
+    )
+    let images = MarkdownTheme.ImageTheme(
+        loadingPlaceholder: nil,
+        backgroundColor: UIColor.clear,
+        inlineSize: 18
+    )
+
+    return MarkdownTheme(
+        baseFont: baseFont,
+        colors: colors,
+        headings: headings,
+        code: code,
+        quote: quote,
+        lists: lists,
+        tables: tables,
+        images: images,
+        paragraphSpacing: 10,
+        linkColor: UIColor(red: 0.6, green: 0.8, blue: 1, alpha: 1),
+        separatorColor: UIColor(red: 0.25, green: 0.25, blue: 0.28, alpha: 1)
+    )
+}
+
 func rgbaComponents(_ color: UIColor) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
     var red: CGFloat = 0
     var green: CGFloat = 0

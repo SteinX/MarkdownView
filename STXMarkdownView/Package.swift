@@ -13,7 +13,8 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-markdown", from: "0.7.3")
+        .package(url: "https://github.com/swiftlang/swift-markdown", from: "0.7.3"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.12.0")
     ],
     targets: [
         .target(
@@ -25,7 +26,10 @@ let package = Package(
         ),
         .testTarget(
             name: "STXMarkdownViewTests",
-            dependencies: ["STXMarkdownView"],
+            dependencies: [
+                "STXMarkdownView",
+                .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
+            ],
             path: "Tests/STXMarkdownViewTests"
         )
     ]
