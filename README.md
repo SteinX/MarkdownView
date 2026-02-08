@@ -85,7 +85,7 @@ pod install
 
 ### 2. Basic Usage
 
-```swift
+````swift
 import STXMarkdownView
 
 let markdownView = MarkdownView()
@@ -100,7 +100,7 @@ print("Hello, World!")
 """
 
 view.addSubview(markdownView)
-```
+````
 
 ### 3. Streaming Mode (Chat UI)
 
