@@ -45,9 +45,14 @@ cleanup() {
   mkdir -p "$OUTPUT_DIR"
 }
 
-# Build using dynamic library Package.swift in a temp directory
-build_dynamic_framework() {
-  log_info "Building dynamic framework using temporary Package.swift..."
+# Build using Package.swift in a temp directory
+build_framework() {
+  local mach_o_type="${1:-mh_dylib}"
+  local lib_type_label="dynamic"
+  if [ "$mach_o_type" = "staticlib" ]; then
+    lib_type_label="static"
+  fi
+  log_info "Building $lib_type_label framework using temporary Package.swift..."
   
   local temp_dir="$BUILD_DIR/dynamic-build"
   mkdir -p "$temp_dir"
@@ -104,9 +109,9 @@ EOF
     SKIP_INSTALL=NO \
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
     CODE_SIGNING_ALLOWED=NO \
+    MACH_O_TYPE="$mach_o_type" \
     2>&1 | xcbeautify 2>/dev/null || cat
   
-  # Archive for iOS Simulator (arm64 + x86_64)
   log_info "Archiving for iOS Simulator..."
   xcodebuild archive \
     -scheme "$FRAMEWORK_NAME" \
@@ -116,6 +121,7 @@ EOF
     SKIP_INSTALL=NO \
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
     CODE_SIGNING_ALLOWED=NO \
+    MACH_O_TYPE="$mach_o_type" \
     2>&1 | xcbeautify 2>/dev/null || cat
   
   cd "$ROOT_DIR"
@@ -156,6 +162,8 @@ show_usage() {
   echo "Options:"
   echo "  --clean          Clean build artifacts only"
   echo "  --skip-clean     Skip cleaning previous builds"
+  echo "  --static         Build as static library (default)"
+  echo "  --dynamic        Build as dynamic library"
   echo "  --config NAME    Build configuration (Debug/Release, default: Release)"
   echo "  --output DIR     Output directory (default: ./output)"
   echo "  -h, --help       Show this help message"
@@ -169,6 +177,7 @@ show_usage() {
 # Parse arguments
 SKIP_CLEAN=false
 CLEAN_ONLY=false
+MACH_O_TYPE="staticlib"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -178,6 +187,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-clean)
       SKIP_CLEAN=true
+      shift
+      ;;
+    --static)
+      MACH_O_TYPE="staticlib"
+      shift
+      ;;
+    --dynamic)
+      MACH_O_TYPE="mh_dylib"
       shift
       ;;
     --config)
@@ -216,8 +233,7 @@ if [ "$SKIP_CLEAN" = false ]; then
   cleanup
 fi
 
-# Build using dynamic framework approach
-build_dynamic_framework
+build_framework "$MACH_O_TYPE"
 
 # Show result
 log_info ""
