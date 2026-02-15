@@ -1,0 +1,68 @@
+name: Build XCFramework on Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-xcframework:
+    name: Build, Upload, and Sync XCFramework
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Build XCFramework
+        run: |
+          chmod +x scripts/build-xcframework.sh
+          ./scripts/build-xcframework.sh --static
+
+      - name: Package XCFramework
+        run: |
+          cd Frameworks
+          zip -r STXMarkdownView.xcframework.zip STXMarkdownView.xcframework
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Frameworks/STXMarkdownView.xcframework.zip
+          fail_on_unmatched_files: true
+
+      - name: Update Frameworks artifact in default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p /tmp/xcframework-sync
+          cp -R Frameworks/STXMarkdownView.xcframework /tmp/xcframework-sync/
+
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+
+          rm -rf Frameworks/STXMarkdownView.xcframework
+          cp -R /tmp/xcframework-sync/STXMarkdownView.xcframework Frameworks/
+
+          if git diff --quiet -- Frameworks/STXMarkdownView.xcframework; then
+            echo "No framework changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Frameworks/STXMarkdownView.xcframework
+          git commit -m "chore: update xcframework for release ${{ github.event.release.tag_name }}"
+          git push origin HEAD:"$DEFAULT_BRANCH"
