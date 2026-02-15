@@ -25,10 +25,20 @@ detect_simulator() {
 SIMULATOR_NAME="${SIMULATOR_NAME:-$(detect_simulator)}"
 echo "Using simulator: $SIMULATOR_NAME"
 
+# Hide xcodeproj so xcodebuild resolves dependencies from Package.swift only.
+# This prevents Highlightr (an app-level dependency) from leaking into the
+# SPM library build via canImport, which would cause linker failures.
+XCODEPROJ="MarkdownDemo.xcodeproj"
+HIDDEN=".MarkdownDemo.xcodeproj.hidden"
+
+if [ -d "$XCODEPROJ" ]; then
+  mv "$XCODEPROJ" "$HIDDEN"
+  trap 'mv "$HIDDEN" "$XCODEPROJ" 2>/dev/null || true' EXIT
+fi
+
 XCODEBUILD_ARGS=(
   test
-  -project MarkdownDemo.xcodeproj
-  -scheme STXMarkdownViewPackageTests
+  -scheme STXMarkdownView
   -destination "platform=iOS Simulator,name=$SIMULATOR_NAME"
   CODE_SIGNING_ALLOWED=NO
 )
