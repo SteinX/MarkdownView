@@ -25,9 +25,16 @@ detect_simulator() {
 SIMULATOR_NAME="${SIMULATOR_NAME:-$(detect_simulator)}"
 echo "Using simulator: $SIMULATOR_NAME"
 
-xcodebuild test \
-  -project MarkdownDemo.xcodeproj \
-  -scheme STXMarkdownViewPackageTests \
-  -destination "platform=iOS Simulator,name=$SIMULATOR_NAME" \
-  CODE_SIGNING_ALLOWED=NO \
-  2>&1
+XCODEBUILD_ARGS=(
+  test
+  -project MarkdownDemo.xcodeproj
+  -scheme STXMarkdownViewPackageTests
+  -destination "platform=iOS Simulator,name=$SIMULATOR_NAME"
+  CODE_SIGNING_ALLOWED=NO
+)
+
+if [ -n "${RESULT_BUNDLE_PATH:-}" ]; then
+  XCODEBUILD_ARGS+=("-resultBundlePath" "$RESULT_BUNDLE_PATH")
+fi
+
+xcodebuild "${XCODEBUILD_ARGS[@]}" 2>&1

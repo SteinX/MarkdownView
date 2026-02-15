@@ -1,0 +1,38 @@
+name: PR Unit Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'STXMarkdownView/**'
+      - 'MarkdownDemo.xcodeproj/**'
+      - 'Package.swift'
+      - 'scripts/run-tests.sh'
+      - '.github/workflows/pr-tests.yml'
+
+concurrency:
+  group: pr-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Run unit tests
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        env:
+          RESULT_BUNDLE_PATH: TestResults.xcresult
+        run: scripts/run-tests.sh
+
+      - name: Upload test result bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-xcresult
+          path: TestResults.xcresult
+          if-no-files-found: ignore
