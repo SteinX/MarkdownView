@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'STXMarkdownView/**'
+      - 'MarkdownDemo/**'
+      - 'MarkdownDemoSnapshotTests/**'
       - 'MarkdownDemo.xcodeproj/**'
       - 'Package.swift'
       - '.swiftlint.yml'
