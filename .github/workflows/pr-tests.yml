@@ -8,6 +8,7 @@ on:
       - 'STXMarkdownView/**'
       - 'MarkdownDemo.xcodeproj/**'
       - 'Package.swift'
+      - '.swiftlint.yml'
       - 'scripts/run-tests.sh'
       - '.github/workflows/pr-tests.yml'
 
@@ -16,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unit-tests:
-    name: Run unit tests
+  ci-test:
+    name: ci/test
     runs-on: macos-15
 
     steps:
@@ -36,3 +37,21 @@ jobs:
           name: test-results-xcresult
           path: TestResults.xcresult
           if-no-files-found: ignore
+
+  ci-lint:
+    name: ci/lint
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure SwiftLint is available
+        run: |
+          if ! command -v swiftlint >/dev/null 2>&1; then
+            brew install swiftlint
+          fi
+          swiftlint version
+
+      - name: Run SwiftLint
+        run: swiftlint lint --strict --reporter github-actions-logging

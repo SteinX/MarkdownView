@@ -1,0 +1,28 @@
+included:
+  - STXMarkdownView/Sources/STXMarkdownView
+  - MarkdownDemo
+
+excluded:
+  - .build
+  - .swiftpm
+  - Pods
+  - Carthage
+  - SourcePackages
+  - "**/DerivedData/**"
+
+disabled_rules:
+  - force_cast
+  - line_length
+  - type_body_length
+  - function_body_length
+  - file_length
+  - cyclomatic_complexity
+  - identifier_name
+  - trailing_whitespace
+  - vertical_whitespace
+  - nesting
+  - unneeded_override
+  - for_where
+  - unused_enumerated
+
+reporter: "xcode"
