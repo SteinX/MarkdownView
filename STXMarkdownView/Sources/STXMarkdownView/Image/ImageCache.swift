@@ -76,6 +76,17 @@ public final class ImageCache {
         ioQueue.async { [weak self] in
             guard let self = self else { return }
 
+            if url.isFileURL {
+                if let thumbnail = self.downsample(fileURL: url, to: targetSize) {
+                    let cost = self.imageCost(thumbnail)
+                    self.memoryCache.setObject(thumbnail, forKey: memoryKey as NSString, cost: cost)
+                    DispatchQueue.main.async { completion(thumbnail) }
+                } else {
+                    DispatchQueue.main.async { completion(nil) }
+                }
+                return
+            }
+
             let diskKey = self.diskCacheKey(for: url)
             let diskURL = self.diskCacheURL.appendingPathComponent(diskKey)
 

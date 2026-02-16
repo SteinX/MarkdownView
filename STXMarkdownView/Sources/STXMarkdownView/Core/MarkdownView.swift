@@ -52,20 +52,11 @@ open class MarkdownView: MarkdownTextView {
     /// MUST be set before setting markdown for proper cell sizing.
     public var preferredMaxLayoutWidth: CGFloat = 0 {
         didSet {
-            if preferredMaxLayoutWidth != oldValue {
-                if preferredMaxLayoutWidth > 0 {
-                    // Disable automatic width tracking so our manual width isn't overwritten
-                    textContainer.widthTracksTextView = false
-                    textContainer.size.width = preferredMaxLayoutWidth
-                } else {
-                    // Re-enable automatic tracking for auto-layout resizing
-                    textContainer.widthTracksTextView = true
-                }
-                
+            applyPreferredTextContainerWidth()
+
+            if preferredMaxLayoutWidth != oldValue, !markdown.isEmpty {
                 // Re-render if markdown already set
-                if !markdown.isEmpty {
-                    renderIfReady()
-                }
+                renderIfReady()
             }
         }
     }
@@ -123,6 +114,8 @@ open class MarkdownView: MarkdownTextView {
     }
     
     open override func layoutSubviews() {
+        applyPreferredTextContainerWidth()
+
         // Check if we need to render (e.g., width wasn't available before)
         let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
         
@@ -133,18 +126,14 @@ open class MarkdownView: MarkdownTextView {
             }
         }
 
-        if preferredMaxLayoutWidth > 0 {
-            textContainer.size = CGSize(width: preferredMaxLayoutWidth, height: .greatestFiniteMagnitude)
-        }
+        applyPreferredTextContainerWidth()
         
         // Call super AFTER render so attachmentViews are set
         super.layoutSubviews()
         
         // Re-enforce the text container width if we have a preference, 
         // because super.layoutSubviews() might have reset it to bounds.width (which could be 0 during sizing)
-        if preferredMaxLayoutWidth > 0 && abs(textContainer.size.width - preferredMaxLayoutWidth) > 0.1 {
-             textContainer.size.width = preferredMaxLayoutWidth
-        }
+        applyPreferredTextContainerWidth()
     }
     
     private func render(with width: CGFloat) {
@@ -260,6 +249,18 @@ open class MarkdownView: MarkdownTextView {
             pendingMarkdown = nil
             cachedDocument = nil
             renderIfReady()
+        }
+    }
+
+    private func applyPreferredTextContainerWidth() {
+        guard preferredMaxLayoutWidth > 0 else {
+            textContainer.widthTracksTextView = true
+            return
+        }
+
+        textContainer.widthTracksTextView = false
+        if abs(textContainer.size.width - preferredMaxLayoutWidth) > CGFloat.ulpOfOne || textContainer.size.height <= 0 {
+            textContainer.size = CGSize(width: preferredMaxLayoutWidth, height: .greatestFiniteMagnitude)
         }
     }
     
