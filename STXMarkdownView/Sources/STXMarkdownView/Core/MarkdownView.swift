@@ -234,6 +234,9 @@ open class MarkdownView: MarkdownTextView {
         let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
         if width > 0 {
             render(with: width)
+            // Flush layout immediately: render() leaves attachment views at (0,0) until
+            // the next vsync; skipping this causes images to float during streaming.
+            layoutIfNeeded()
         } else {
             setNeedsLayout()
         }
@@ -252,6 +255,10 @@ open class MarkdownView: MarkdownTextView {
         }
     }
 
+    open override func restoreTextContainerConfiguration() {
+        applyPreferredTextContainerWidth()
+    }
+
     private func applyPreferredTextContainerWidth() {
         guard preferredMaxLayoutWidth > 0 else {
             textContainer.widthTracksTextView = true
@@ -259,7 +266,8 @@ open class MarkdownView: MarkdownTextView {
         }
 
         textContainer.widthTracksTextView = false
-        if abs(textContainer.size.width - preferredMaxLayoutWidth) > CGFloat.ulpOfOne || textContainer.size.height <= 0 {
+        if abs(textContainer.size.width - preferredMaxLayoutWidth) > CGFloat.ulpOfOne
+            || textContainer.size.height < .greatestFiniteMagnitude {
             textContainer.size = CGSize(width: preferredMaxLayoutWidth, height: .greatestFiniteMagnitude)
         }
     }

@@ -14,6 +14,10 @@ public class CodeBlockView: UIView, Reusable {
     private var language: String?
     private var isHighlighted: Bool = false
     private var currentTheme: MarkdownTheme?
+    #if canImport(Highlightr)
+    private static var cachedHighlightr: Highlightr?
+    private static var cachedHighlightrTheme: String?
+    #endif
     
     public init(code: String, language: String?, theme: MarkdownTheme) {
         self.code = code
@@ -162,19 +166,30 @@ public class CodeBlockView: UIView, Reusable {
     /// Returns nil if Highlightr is not available or highlighting fails
     private static func highlightCode(_ code: String, language: String, themeName: String, codeFont: UIFont) -> NSAttributedString? {
         #if canImport(Highlightr)
-
-        guard let highlightr = Highlightr() else {
-             MarkdownLogger.error(.codeBlock, "Failed to initialize Highlightr")
-             return nil
+        let highlightr: Highlightr
+        if let cached = cachedHighlightr {
+            highlightr = cached
+        } else {
+            guard let newInstance = Highlightr() else {
+                MarkdownLogger.error(.codeBlock, "Failed to initialize Highlightr")
+                return nil
+            }
+            cachedHighlightr = newInstance
+            highlightr = newInstance
         }
-        highlightr.setTheme(to: themeName)
+        
+        // Reconfigure theme only when changed
+        if cachedHighlightrTheme != themeName {
+            highlightr.setTheme(to: themeName)
+            cachedHighlightrTheme = themeName
+        }
         highlightr.theme.codeFont = codeFont
         
         if let result = highlightr.highlight(code, as: language, fastRender: true) {
-             return result
+            return result
         } else {
-             MarkdownLogger.error(.codeBlock, "Highlightr failed to highlight code for language: \(language)")
-             return nil
+            MarkdownLogger.error(.codeBlock, "Highlightr failed to highlight code for language: \(language)")
+            return nil
         }
         #else
         MarkdownLogger.warning(.codeBlock, "Highlightr module is NOT imported. Syntax highlighting is disabled.")

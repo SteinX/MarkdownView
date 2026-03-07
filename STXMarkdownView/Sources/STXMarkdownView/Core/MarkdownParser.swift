@@ -18,6 +18,12 @@ struct MarkdownParseResult {
     let attachments: [Int: AttachmentInfo] // Character Index -> View
 }
 
+// Cached transparent placeholder image for NSTextAttachment (avoids repeated CGContext allocations)
+private let _transparentPlaceholder: UIImage = {
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+    return renderer.image { _ in }
+}()
+
 // MARK: - Main Parser
 
 struct MarkdownParser: MarkupWalker {
@@ -34,6 +40,8 @@ struct MarkdownParser: MarkupWalker {
     private let isStreaming: Bool
     private let tableSizeCache: TableCellSizeCache?
     private var currentCodeBlockIndex: Int = 0
+    private let boldFont: UIFont
+    private let italicFont: UIFont
     
     init(theme: MarkdownTheme, maxLayoutWidth: CGFloat, imageHandler: MarkdownImageHandler = DefaultImageHandler(), isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, codeBlockState: CodeBlockAnalyzer.CodeBlockState? = nil, isStreaming: Bool = false, tableSizeCache: TableCellSizeCache? = nil) {
         self.theme = theme
@@ -45,6 +53,8 @@ struct MarkdownParser: MarkupWalker {
         self.codeBlockState = codeBlockState
         self.isStreaming = isStreaming
         self.tableSizeCache = tableSizeCache
+        self.boldFont = theme.baseFont.withTraits(.traitBold)
+        self.italicFont = theme.baseFont.withTraits(.traitItalic)
     }
     
     mutating func parse(_ document: Document) -> MarkdownParseResult {
@@ -114,7 +124,6 @@ struct MarkdownParser: MarkupWalker {
     }
     
     mutating func visitStrong(_ strong: Strong) {
-        let boldFont = theme.baseFont.withTraits(.traitBold)
         let attributes: [NSAttributedString.Key: Any] = [.font: boldFont]
         let start = attributedString.length
         descendInto(strong)
@@ -122,7 +131,6 @@ struct MarkdownParser: MarkupWalker {
     }
     
     mutating func visitEmphasis(_ emphasis: Emphasis) {
-        let italicFont = theme.baseFont.withTraits(.traitItalic)
         let attributes: [NSAttributedString.Key: Any] = [.font: italicFont]
         let start = attributedString.length
         descendInto(emphasis)
@@ -443,7 +451,7 @@ struct MarkdownParser: MarkupWalker {
             maxLayoutWidth: availableWidth - padding,
             imageHandler: imageHandler,
             isInsideQuote: true,
-            attachmentPool: nil,
+            attachmentPool: attachmentPool,
             codeBlockState: codeBlockState,
             isStreaming: isStreaming,
             tableSizeCache: tableSizeCache
@@ -477,8 +485,6 @@ struct MarkdownParser: MarkupWalker {
         view.preferredMaxLayoutWidth = availableWidth
         
         view.frame = CGRect(x: 0, y: 0, width: availableWidth, height: 1000)
-        view.setNeedsLayout()
-        view.layoutIfNeeded()
         
         let size = view.systemLayoutSizeFitting(
             CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
@@ -504,7 +510,7 @@ struct MarkdownParser: MarkupWalker {
                 baseFont: theme.baseFont,
                 imageHandler: imageHandler,
                 isInsideQuote: isInsideQuote,
-                attachmentPool: nil,
+                attachmentPool: attachmentPool,
                 isStreaming: isStreaming
             )
             parser.visit(cell)
@@ -512,7 +518,6 @@ struct MarkdownParser: MarkupWalker {
         }
         
         var headerItems: [(NSAttributedString, [Int: AttachmentInfo])] = []
-        let boldFont = theme.baseFont.withTraits(.traitBold)
         
         for cell in table.head.cells {
             var parser = InlineParser(
@@ -520,7 +525,7 @@ struct MarkdownParser: MarkupWalker {
                 baseFont: boldFont,
                 imageHandler: imageHandler,
                 isInsideQuote: isInsideQuote,
-                attachmentPool: nil,
+                attachmentPool: attachmentPool,
                 isStreaming: isStreaming
             )
             parser.visit(cell)
@@ -609,8 +614,7 @@ struct MarkdownParser: MarkupWalker {
     }
     
     private mutating func insertAttachment(view: UIView, size: CGSize, isBlock: Bool, contentKey: AnyHashable) {
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { _ in }
+        let image = _transparentPlaceholder
         
         let attachment = NSTextAttachment()
         attachment.image = image
@@ -683,6 +687,8 @@ struct InlineParser: MarkupWalker {
     let isInsideQuote: Bool
     let attachmentPool: AttachmentPool?
     let isStreaming: Bool
+    let boldFont: UIFont
+    let italicFont: UIFont
     
     init(theme: MarkdownTheme, baseFont: UIFont, imageHandler: MarkdownImageHandler? = nil, isInsideQuote: Bool = false, attachmentPool: AttachmentPool? = nil, isStreaming: Bool = false) {
         self.theme = theme
@@ -691,6 +697,8 @@ struct InlineParser: MarkupWalker {
         self.isInsideQuote = isInsideQuote
         self.attachmentPool = attachmentPool
         self.isStreaming = isStreaming
+        self.boldFont = baseFont.withTraits(.traitBold)
+        self.italicFont = baseFont.withTraits(.traitItalic)
     }
     
     mutating func visitText(_ text: Text) {
@@ -729,8 +737,7 @@ struct InlineParser: MarkupWalker {
         
         view.frame = CGRect(origin: .zero, size: size)
         
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let placeholderImage = renderer.image { _ in }
+        let placeholderImage = _transparentPlaceholder
         
         let attachment = NSTextAttachment()
         attachment.image = placeholderImage
@@ -753,7 +760,6 @@ struct InlineParser: MarkupWalker {
         let start = attributedString.length
         descendInto(strong)
         let range = NSRange(location: start, length: attributedString.length - start)
-        let boldFont = baseFont.withTraits(.traitBold)
         attributedString.addAttribute(.font, value: boldFont, range: range)
     }
     
@@ -761,7 +767,6 @@ struct InlineParser: MarkupWalker {
         let start = attributedString.length
         descendInto(emphasis)
         let range = NSRange(location: start, length: attributedString.length - start)
-        let italicFont = baseFont.withTraits(.traitItalic)
         attributedString.addAttribute(.font, value: italicFont, range: range)
     }
     

@@ -83,6 +83,11 @@ open class MarkdownTextView: UITextView {
     open override func layoutSubviews() {
         super.layoutSubviews()
         
+        // UITextView.layoutSubviews() may reset textContainer.size to bounds.width.
+        // Subclasses restore their preferred configuration here, before ensureLayout runs,
+        // so glyph y-positions for attachment views are calculated against the correct width.
+        restoreTextContainerConfiguration()
+        
         // Ensure layout is complete
         layoutManager.ensureLayout(for: textContainer)
         
@@ -122,6 +127,8 @@ open class MarkdownTextView: UITextView {
         }
     }
     
+    open func restoreTextContainerConfiguration() { }
+
     /// Cleanup method for Cell reuse
     public func cleanUp() {
         attachmentViews.values.forEach { $0.view.removeFromSuperview() }
