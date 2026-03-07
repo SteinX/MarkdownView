@@ -108,6 +108,45 @@ final class MarkdownDemoSnapshotTests: XCTestCase {
         assertMarkdownSnapshot(named: "DarkMode")
     }
 
+    // MARK: - Image layout regression
+
+    func testImageAttachmentPositionedBelowPrecedingContent() {
+        sut.markdown = """
+        # Heading
+
+        Some paragraph text before the image.
+
+        ![Image](https://example.com/image.png)
+        """
+
+        for _ in 0..<5 {
+            sut.setNeedsLayout()
+            sut.layoutIfNeeded()
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        sut.layoutIfNeeded()
+
+        let imageAttachment = sut.attachmentViews.values.first { $0.view is MarkdownImageView }
+        XCTAssertNotNil(imageAttachment, "Expected a MarkdownImageView attachment in the rendered document")
+        let yPosition = imageAttachment?.view.frame.origin.y ?? 0
+        XCTAssertGreaterThan(
+            yPosition, 30,
+            "MarkdownImageView is at y=\(yPosition) — expected below heading text (y>30). "
+            + "Possible regression: textContainer.size.height reset caused glyph layout truncation."
+        )
+    }
+
+    func testSnapshotImageAtDocumentEnd() {
+        sut.markdown = """
+        # Document Title
+
+        Some paragraph text before the image.
+
+        ![Image](https://example.com/image.png)
+        """
+        assertMarkdownSnapshot(named: "ImageAtDocumentEnd")
+    }
+
     private func assertMarkdownSnapshot(named name: String, file: StaticString = #file, testName: String = #function) {
         sut.preferredMaxLayoutWidth = 342
         sut.textContainer.size = CGSize(width: 342, height: CGFloat.greatestFiniteMagnitude)

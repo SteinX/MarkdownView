@@ -26,6 +26,7 @@ final class StreamingDemoViewController: UIViewController {
 
     private var streamingSimulator: StreamingSimulator?
     private var isStreaming = false
+    private var hasInitializedContent = false
 
     private let markdownContent = """
     # Streaming Demo
@@ -84,16 +85,20 @@ final class StreamingDemoViewController: UIViewController {
         ])
 
         toggleButton.addTarget(self, action: #selector(toggleStreaming), for: .touchUpInside)
-
-        markdownView.markdown = markdownContent
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
         let availableWidth = view.bounds.width - 32
-        if availableWidth > 0 && markdownView.preferredMaxLayoutWidth != availableWidth {
-            markdownView.preferredMaxLayoutWidth = availableWidth
+        if availableWidth > 0 {
+            if markdownView.preferredMaxLayoutWidth != availableWidth {
+                markdownView.preferredMaxLayoutWidth = availableWidth
+            }
+            if !hasInitializedContent {
+                hasInitializedContent = true
+                markdownView.markdown = markdownContent
+            }
         }
     }
 
