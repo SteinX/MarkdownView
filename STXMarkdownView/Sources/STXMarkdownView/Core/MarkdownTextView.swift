@@ -4,8 +4,16 @@ import UIKit
 /// Used by MarkdownView, QuoteView, and MarkdownTableView for consistent attachment layout.
 open class MarkdownTextView: UITextView {
     
+    // MARK: - Attachment Layout Tracking
+    
+    /// When false, layoutSubviews skips the expensive attachment positioning loop.
+    /// Set to true when attachmentViews changes, textStorage is edited, or bounds width changes.
+    private var needsAttachmentLayout: Bool = true
+    private var lastAttachmentLayoutWidth: CGFloat = -1
+    
     public var attachmentViews: [Int: AttachmentInfo] = [:] {
         didSet {
+            needsAttachmentLayout = true
             let oldViewIDs = Set(oldValue.values.map { ObjectIdentifier($0.view) })
             let newViewIDs = Set(attachmentViews.values.map { ObjectIdentifier($0.view) })
             for info in oldValue.values where !newViewIDs.contains(ObjectIdentifier(info.view)) {
@@ -16,6 +24,12 @@ open class MarkdownTextView: UITextView {
             }
             setNeedsLayout()
         }
+    }
+    
+    /// Marks attachment positions as needing recalculation.
+    /// Called by subclasses when textStorage content changes without attachmentViews being reassigned.
+    func setNeedsAttachmentLayout() {
+        needsAttachmentLayout = true
     }
 
     
@@ -84,13 +98,13 @@ open class MarkdownTextView: UITextView {
     
     open override func layoutSubviews() {
         super.layoutSubviews()
-        
-        // UITextView.layoutSubviews() may reset textContainer.size to bounds.width.
-        // Subclasses restore their preferred configuration here, before ensureLayout runs,
-        // so glyph y-positions for attachment views are calculated against the correct width.
         restoreTextContainerConfiguration()
         
-        // Ensure layout is complete
+        let currentWidth = bounds.width
+        let widthChanged = abs(currentWidth - lastAttachmentLayoutWidth) > CGFloat.ulpOfOne
+        
+        guard needsAttachmentLayout || widthChanged else { return }
+        
         layoutManager.ensureLayout(for: textContainer)
         
         let attachmentCount = attachmentViews.count
@@ -102,13 +116,10 @@ open class MarkdownTextView: UITextView {
             let view = info.view
             guard charIndex < (attributedText?.length ?? 0) else { continue }
             
-            // Find Glyph Index for Character
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: charIndex)
             
-            // Calculate Frame
             var rect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
 
-            // Some attachment glyphs can report a zero rect; fall back to attachment bounds.
             if rect.size == .zero {
                 let lineFragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
                 let glyphLocation = layoutManager.location(forGlyphAt: glyphIndex)
@@ -117,16 +128,16 @@ open class MarkdownTextView: UITextView {
                 rect = CGRect(origin: origin, size: attachmentSize)
             }
             
-            // Convert Coordinates
             let finalRect = rect.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
             
-            // Update View Frame
             if view.frame != finalRect {
                 view.frame = finalRect
-                // Perf: avoid layoutIfNeeded() here — causes recursive sync layout 3-4 levels deep
                 view.setNeedsLayout()
             }
         }
+        
+        needsAttachmentLayout = false
+        lastAttachmentLayoutWidth = currentWidth
     }
     
     open func restoreTextContainerConfiguration() { }
@@ -136,6 +147,7 @@ open class MarkdownTextView: UITextView {
         attachmentViews.values.forEach { $0.view.removeFromSuperview() }
         attachmentViews.removeAll()
         attributedText = nil
+        lastAttachmentLayoutWidth = -1
     }
 
 }
