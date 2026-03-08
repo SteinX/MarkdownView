@@ -102,6 +102,29 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertEqual(result.attachments.count, 1)
     }
 
+    func testTableCellParseCacheInvalidatesWhenLinkDestinationChanges() {
+        let cache = TableCellSizeCache()
+        let firstMarkdown = "| Link |\n|---|\n| [docs](https://example.com/a) |"
+        let secondMarkdown = "| Link |\n|---|\n| [docs](https://example.com/b) |"
+
+        var firstParser = MarkdownParser(theme: makeTestTheme(), maxLayoutWidth: 320, tableSizeCache: cache)
+        let firstResult = firstParser.parse(Document(parsing: firstMarkdown))
+        XCTAssertEqual(firstResult.attachments.count, 1)
+
+        var secondParser = MarkdownParser(theme: makeTestTheme(), maxLayoutWidth: 320, tableSizeCache: cache)
+        let secondResult = secondParser.parse(Document(parsing: secondMarkdown))
+        XCTAssertEqual(secondResult.attachments.count, 1)
+
+        let firstTableView = try XCTUnwrap(firstResult.attachments.values.first?.view as? MarkdownTableView)
+        let secondTableView = try XCTUnwrap(secondResult.attachments.values.first?.view as? MarkdownTableView)
+
+        let firstLink = firstTableView.headers[0].attribute(.link, at: 0, effectiveRange: nil) as? String
+        let secondLink = secondTableView.headers[0].attribute(.link, at: 0, effectiveRange: nil) as? String
+
+        XCTAssertEqual(firstLink, "https://example.com/a")
+        XCTAssertEqual(secondLink, "https://example.com/b")
+    }
+
     func testBlockQuoteCreatesAttachment() {
         var parser = MarkdownParser(theme: makeTestTheme(), maxLayoutWidth: 240)
         let document = Document(parsing: "> Quote")

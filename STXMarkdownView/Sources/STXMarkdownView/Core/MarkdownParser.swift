@@ -524,6 +524,9 @@ struct MarkdownParser: MarkupWalker {
                     hasher.combine(text.string)
                 } else if let code = node as? InlineCode {
                     hasher.combine(code.code)
+                } else if let link = node as? Link {
+                    hasher.combine(link.destination ?? "")
+                    hasher.combine(link.title ?? "")
                 }
                 for child in node.children {
                     hashNode(child)
