@@ -834,12 +834,13 @@ struct InlineParser: MarkupWalker {
     
     mutating func visitLink(_ link: Link) {
          let attributes: [NSAttributedString.Key: Any] = [
-             .foregroundColor: theme.linkColor
+             .foregroundColor: theme.linkColor,
+             .link: link.destination ?? ""
          ]
          let start = attributedString.length
          descendInto(link)
          attributedString.addAttributes(attributes, range: NSRange(location: start, length: attributedString.length - start))
-    }
+     }
     
     mutating func visitStrikethrough(_ strikethrough: Strikethrough) {
         let attributes: [NSAttributedString.Key: Any] = [

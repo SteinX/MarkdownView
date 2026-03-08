@@ -111,19 +111,20 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         XCTAssertEqual(sut.textContainer.size.width, 300, accuracy: 0.5)
     }
 
-    func testThemeUpdateRerendersWithoutMarkdownOrWidthChange() {
+    func testThemeUpdateRerendersWithoutMarkdownOrWidthChange() throws {
         sut.markdown = "**Bold**"
         sut.layoutIfNeeded()
 
-        let originalResult = sut.lastRenderedResult
-        XCTAssertNotNil(originalResult)
+        let originalResult = try XCTUnwrap(sut.lastRenderedResult)
 
         sut.theme = makeDarkTestTheme()
         sut.layoutIfNeeded()
 
-        let updatedResult = sut.lastRenderedResult
-        XCTAssertNotNil(updatedResult)
-        XCTAssertFalse(originalResult === updatedResult, "Theme changes should invalidate render skip cache and produce a fresh render result")
+        let updatedResult = try XCTUnwrap(sut.lastRenderedResult)
+        XCTAssertFalse(
+            originalResult.attributedString === updatedResult.attributedString,
+            "Theme changes should invalidate render skip cache and produce a fresh render result"
+        )
     }
 
     func testImageHandlerUpdateRerendersWithoutMarkdownOrWidthChange() throws {
@@ -131,16 +132,17 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         sut.markdown = "![Image](\(fileURL.absoluteString))"
         sut.layoutIfNeeded()
 
-        let originalResult = sut.lastRenderedResult
-        XCTAssertNotNil(originalResult)
+        let originalResult = try XCTUnwrap(sut.lastRenderedResult)
 
         let newHandler = MockImageHandler()
         sut.imageHandler = newHandler
         sut.layoutIfNeeded()
 
-        let updatedResult = sut.lastRenderedResult
-        XCTAssertNotNil(updatedResult)
-        XCTAssertFalse(originalResult === updatedResult, "Image handler changes should invalidate render skip cache and produce a fresh render result")
+        let updatedResult = try XCTUnwrap(sut.lastRenderedResult)
+        XCTAssertFalse(
+            originalResult.attributedString === updatedResult.attributedString,
+            "Image handler changes should invalidate render skip cache and produce a fresh render result"
+        )
     }
 
     // MARK: - findCommonPrefixLength Correctness (Wave 1)

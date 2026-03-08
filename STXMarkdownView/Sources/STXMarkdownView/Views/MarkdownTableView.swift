@@ -76,6 +76,14 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     private var columnWidths: [CGFloat] = []
     private var rowHeights: [CGFloat] = []
     private var tableContentSize: CGSize = .zero
+
+    internal var headerAttributedTextsForTesting: [NSAttributedString] {
+        headers.map { $0.0 }
+    }
+
+    internal var rowAttributedTextsForTesting: [[NSAttributedString]] {
+        rows.map { row in row.map { $0.0 } }
+    }
     
     public init(headers: [(NSAttributedString, [Int: AttachmentInfo])], rows: [[(NSAttributedString, [Int: AttachmentInfo])]], theme: MarkdownTheme, maxLayoutWidth: CGFloat, precomputedLayout: MarkdownTableLayoutResult? = nil, sizeCache: TableCellSizeCache? = nil) {
         self.headers = headers
