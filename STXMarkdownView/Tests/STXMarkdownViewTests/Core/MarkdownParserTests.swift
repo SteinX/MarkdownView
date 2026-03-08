@@ -102,7 +102,7 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertEqual(result.attachments.count, 1)
     }
 
-    func testTableCellParseCacheInvalidatesWhenLinkDestinationChanges() {
+    func testTableCellParseCacheInvalidatesWhenLinkDestinationChanges() throws {
         let cache = TableCellSizeCache()
         let firstMarkdown = "| Link |\n|---|\n| [docs](https://example.com/a) |"
         let secondMarkdown = "| Link |\n|---|\n| [docs](https://example.com/b) |"
@@ -118,8 +118,29 @@ final class MarkdownParserTests: XCTestCase {
         let firstTableView = try XCTUnwrap(firstResult.attachments.values.first?.view as? MarkdownTableView)
         let secondTableView = try XCTUnwrap(secondResult.attachments.values.first?.view as? MarkdownTableView)
 
-        let firstLink = firstTableView.headers[0].attribute(.link, at: 0, effectiveRange: nil) as? String
-        let secondLink = secondTableView.headers[0].attribute(.link, at: 0, effectiveRange: nil) as? String
+        let firstCell = try XCTUnwrap(firstTableView.rowAttributedTextsForTesting.first?.first)
+        let secondCell = try XCTUnwrap(secondTableView.rowAttributedTextsForTesting.first?.first)
+
+        func firstLinkString(in attributedText: NSAttributedString) -> String? {
+            var extractedLink: String?
+            attributedText.enumerateAttribute(
+                .link,
+                in: NSRange(location: 0, length: attributedText.length),
+                options: []
+            ) { value, _, stop in
+                if let url = value as? URL {
+                    extractedLink = url.absoluteString
+                    stop.pointee = true
+                } else if let link = value as? String {
+                    extractedLink = link
+                    stop.pointee = true
+                }
+            }
+            return extractedLink
+        }
+
+        let firstLink = firstLinkString(in: firstCell)
+        let secondLink = firstLinkString(in: secondCell)
 
         XCTAssertEqual(firstLink, "https://example.com/a")
         XCTAssertEqual(secondLink, "https://example.com/b")
