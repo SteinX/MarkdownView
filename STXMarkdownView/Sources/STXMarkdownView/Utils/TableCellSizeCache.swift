@@ -31,6 +31,13 @@ public final class TableCellSizeCache {
         var lastAccess: UInt64
     }
 
+    private struct AccessRecord {
+        let isIntrinsic: Bool
+        let access: UInt64
+        let intrinsicKey: IntrinsicKey?
+        let heightKey: HeightKey?
+    }
+
     private final class CellParseCacheKey: NSObject {
         let contentHash: Int
         let isHeader: Bool
@@ -191,13 +198,13 @@ public final class TableCellSizeCache {
 
         let removeTarget = total - maxEntries + maxEntries / 4
 
-        var allAccess: [(isIntrinsic: Bool, access: UInt64, intrinsicKey: IntrinsicKey?, heightKey: HeightKey?)] = []
+        var allAccess: [AccessRecord] = []
         allAccess.reserveCapacity(total)
         for (key, entry) in intrinsicCache {
-            allAccess.append((true, entry.lastAccess, key, nil))
+            allAccess.append(AccessRecord(isIntrinsic: true, access: entry.lastAccess, intrinsicKey: key, heightKey: nil))
         }
         for (key, entry) in heightCache {
-            allAccess.append((false, entry.lastAccess, nil, key))
+            allAccess.append(AccessRecord(isIntrinsic: false, access: entry.lastAccess, intrinsicKey: nil, heightKey: key))
         }
         allAccess.sort { $0.access < $1.access }
 
