@@ -53,5 +53,4 @@ buildServer.json
 .vscode/
 
 # AI Agent files
-AGENTS.md
-**/AGENTS.md
+.sisyphus

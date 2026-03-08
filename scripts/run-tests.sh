@@ -10,6 +10,23 @@ fi
 
 cd "$ROOT_DIR"
 
+PACKAGE_TEST_ROOT="$ROOT_DIR"
+PACKAGE_SANDBOX=""
+
+if [ -d "$ROOT_DIR/MarkdownDemo.xcodeproj" ]; then
+  PACKAGE_SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/stxmarkdown-spm-tests.XXXXXX")"
+  trap 'rm -rf "$PACKAGE_SANDBOX"' EXIT
+
+  ln -s "$ROOT_DIR/Package.swift" "$PACKAGE_SANDBOX/Package.swift"
+  if [ -f "$ROOT_DIR/Package.resolved" ]; then
+    ln -s "$ROOT_DIR/Package.resolved" "$PACKAGE_SANDBOX/Package.resolved"
+  fi
+  ln -s "$ROOT_DIR/STXMarkdownView" "$PACKAGE_SANDBOX/STXMarkdownView"
+
+  PACKAGE_TEST_ROOT="$PACKAGE_SANDBOX"
+  echo "Using package-only sandbox: $PACKAGE_TEST_ROOT"
+fi
+
 detect_simulator() {
   local available_sims
   available_sims=$(xcrun simctl list devices available 2>/dev/null | grep -E "iPhone.*\(.*\)" | head -1)
@@ -25,17 +42,6 @@ detect_simulator() {
 SIMULATOR_NAME="${SIMULATOR_NAME:-$(detect_simulator)}"
 echo "Using simulator: $SIMULATOR_NAME"
 
-# Hide xcodeproj so xcodebuild resolves dependencies from Package.swift only.
-# This prevents Highlightr (an app-level dependency) from leaking into the
-# SPM library build via canImport, which would cause linker failures.
-XCODEPROJ="MarkdownDemo.xcodeproj"
-HIDDEN=".MarkdownDemo.xcodeproj.hidden"
-
-if [ -d "$XCODEPROJ" ]; then
-  mv "$XCODEPROJ" "$HIDDEN"
-  trap 'mv "$HIDDEN" "$XCODEPROJ" 2>/dev/null || true' EXIT
-fi
-
 XCODEBUILD_ARGS=(
   test
   -scheme STXMarkdownView
@@ -47,4 +53,5 @@ if [ -n "${RESULT_BUNDLE_PATH:-}" ]; then
   XCODEBUILD_ARGS+=("-resultBundlePath" "$RESULT_BUNDLE_PATH")
 fi
 
+cd "$PACKAGE_TEST_ROOT"
 xcodebuild "${XCODEBUILD_ARGS[@]}" 2>&1

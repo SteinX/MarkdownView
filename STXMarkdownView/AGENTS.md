@@ -99,14 +99,3 @@ STXMarkdownView/
 3. `isStreaming = false` → final render, pool returns to content-keyed mode
 4. `CodeBlockAnalyzer` skips highlighting on unclosed code fences
 5. O7 incremental update: finds common prefix, replaces only changed tail in textStorage
-
-## Learning rule
-
-When discovering a reusable insight, propose an update to learning.md.
-
-Examples:
-
-- architecture decisions
-- coding conventions
-- recurring bugs
-- environment limitations

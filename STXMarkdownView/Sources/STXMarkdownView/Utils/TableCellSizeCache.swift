@@ -21,19 +21,70 @@ public final class TableCellSizeCache {
         var lastAccess: UInt64
     }
 
+    private struct LayoutKey: Hashable {
+        let dataHash: Int
+        let width: Int
+    }
+
+    private struct LayoutEntry {
+        var result: MarkdownTableLayoutResult
+        var lastAccess: UInt64
+    }
+
+    private final class CellParseCacheKey: NSObject {
+        let contentHash: Int
+        let isHeader: Bool
+
+        init(contentHash: Int, isHeader: Bool) {
+            self.contentHash = contentHash
+            self.isHeader = isHeader
+        }
+
+        override var hash: Int {
+            var hasher = Hasher()
+            hasher.combine(contentHash)
+            hasher.combine(isHeader)
+            return hasher.finalize()
+        }
+
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? CellParseCacheKey else { return false }
+            return contentHash == other.contentHash && isHeader == other.isHeader
+        }
+    }
+
     private let lock = NSLock()
     private var intrinsicCache: [IntrinsicKey: IntrinsicEntry] = [:]
     private var heightCache: [HeightKey: HeightEntry] = [:]
+    private var layoutCache: [LayoutKey: LayoutEntry] = [:]
+    private let cellParseCache = NSCache<CellParseCacheKey, NSAttributedString>()
     private var accessCounter: UInt64 = 0
     private let maxEntries: Int
+    private let maxLayoutEntries: Int = 32
     private var hitsIntrinsic: UInt64 = 0
     private var hitsHeight: UInt64 = 0
+    private var hitsLayout: UInt64 = 0
+    private var hitsCellParse: UInt64 = 0
     private var missesIntrinsic: UInt64 = 0
     private var missesHeight: UInt64 = 0
+    private var missesLayout: UInt64 = 0
+    private var missesCellParse: UInt64 = 0
     private var evictions: UInt64 = 0
 
     public init(maxEntries: Int = 800) {
         self.maxEntries = maxEntries
+        cellParseCache.countLimit = 200
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     func intrinsicWidth(for text: NSAttributedString) -> CGFloat? {
@@ -84,39 +135,81 @@ public final class TableCellSizeCache {
         lock.unlock()
     }
 
+    func cachedLayout(dataHash: Int, width: CGFloat) -> MarkdownTableLayoutResult? {
+        let key = LayoutKey(dataHash: dataHash, width: Int(round(max(0, width))))
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard var entry = layoutCache[key] else {
+            missesLayout += 1
+            return nil
+        }
+        accessCounter += 1
+        entry.lastAccess = accessCounter
+        layoutCache[key] = entry
+        hitsLayout += 1
+        return entry.result
+    }
+
+    func storeLayout(_ result: MarkdownTableLayoutResult, dataHash: Int, width: CGFloat) {
+        let key = LayoutKey(dataHash: dataHash, width: Int(round(max(0, width))))
+        lock.lock()
+        accessCounter += 1
+        layoutCache[key] = LayoutEntry(result: result, lastAccess: accessCounter)
+        if layoutCache.count > maxLayoutEntries {
+            let sorted = layoutCache.sorted { $0.value.lastAccess < $1.value.lastAccess }
+            let removeCount = layoutCache.count - maxLayoutEntries + maxLayoutEntries / 4
+            for i in 0..<min(removeCount, sorted.count) {
+                layoutCache.removeValue(forKey: sorted[i].key)
+            }
+        }
+        lock.unlock()
+    }
+
+    func cachedCellParse(contentHash: Int, isHeader: Bool) -> NSAttributedString? {
+        let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader)
+        if let cached = cellParseCache.object(forKey: key) {
+            lock.lock()
+            hitsCellParse += 1
+            lock.unlock()
+            return cached
+        }
+        lock.lock()
+        missesCellParse += 1
+        lock.unlock()
+        return nil
+    }
+
+    func storeCellParse(contentHash: Int, isHeader: Bool, attributedString: NSAttributedString) {
+        let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader)
+        cellParseCache.setObject(attributedString, forKey: key)
+    }
+
     private func evictIfNeeded() {
-        while totalCount > maxEntries {
-            var oldestIntrinsic: (key: IntrinsicKey, access: UInt64)?
-            for (key, value) in intrinsicCache {
-                if oldestIntrinsic == nil || value.lastAccess < oldestIntrinsic!.access {
-                    oldestIntrinsic = (key, value.lastAccess)
-                }
-            }
+        let total = intrinsicCache.count + heightCache.count
+        guard total > maxEntries else { return }
 
-            var oldestHeight: (key: HeightKey, access: UInt64)?
-            for (key, value) in heightCache {
-                if oldestHeight == nil || value.lastAccess < oldestHeight!.access {
-                    oldestHeight = (key, value.lastAccess)
-                }
-            }
+        let removeTarget = total - maxEntries + maxEntries / 4
 
-            if let oldestIntrinsic = oldestIntrinsic, let oldestHeight = oldestHeight {
-                if oldestIntrinsic.access <= oldestHeight.access {
-                    intrinsicCache.removeValue(forKey: oldestIntrinsic.key)
-                    evictions += 1
-                } else {
-                    heightCache.removeValue(forKey: oldestHeight.key)
-                    evictions += 1
-                }
-            } else if let oldestIntrinsic = oldestIntrinsic {
-                intrinsicCache.removeValue(forKey: oldestIntrinsic.key)
-                evictions += 1
-            } else if let oldestHeight = oldestHeight {
-                heightCache.removeValue(forKey: oldestHeight.key)
-                evictions += 1
-            } else {
-                break
+        var allAccess: [(isIntrinsic: Bool, access: UInt64, intrinsicKey: IntrinsicKey?, heightKey: HeightKey?)] = []
+        allAccess.reserveCapacity(total)
+        for (key, entry) in intrinsicCache {
+            allAccess.append((true, entry.lastAccess, key, nil))
+        }
+        for (key, entry) in heightCache {
+            allAccess.append((false, entry.lastAccess, nil, key))
+        }
+        allAccess.sort { $0.access < $1.access }
+
+        let toRemove = min(removeTarget, allAccess.count)
+        for i in 0..<toRemove {
+            let item = allAccess[i]
+            if item.isIntrinsic, let key = item.intrinsicKey {
+                intrinsicCache.removeValue(forKey: key)
+            } else if let key = item.heightKey {
+                heightCache.removeValue(forKey: key)
             }
+            evictions += 1
         }
     }
 
@@ -132,7 +225,28 @@ public final class TableCellSizeCache {
         let totalMisses = missesIntrinsic + missesHeight
         let totalRequests = totalHits + totalMisses
         let hitRate = totalRequests == 0 ? 0 : (Double(totalHits) / Double(totalRequests)) * 100.0
+        let cellParseTotal = hitsCellParse + missesCellParse
+        let cellParseRate = cellParseTotal == 0 ? 0 : (Double(hitsCellParse) / Double(cellParseTotal)) * 100.0
 
-        MarkdownLogger.debug(.table, "sizeCache \(context) entries=\(totalCount)/\(maxEntries) hits=\(totalHits) misses=\(totalMisses) hitRate=\(String(format: "%.1f", hitRate))% evictions=\(evictions)")
+        MarkdownLogger.debug(.table, "sizeCache \(context) entries=\(totalCount)/\(maxEntries) layout=\(layoutCache.count)/\(maxLayoutEntries) cellParseHitRate=\(String(format: "%.1f", cellParseRate))% hits=\(totalHits) misses=\(totalMisses) hitRate=\(String(format: "%.1f", hitRate))% layoutHits=\(hitsLayout) layoutMisses=\(missesLayout) cellParseHits=\(hitsCellParse) cellParseMisses=\(missesCellParse) evictions=\(evictions)")
+    }
+    
+    func clearAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        let count = intrinsicCache.count + heightCache.count + layoutCache.count
+        intrinsicCache.removeAll()
+        heightCache.removeAll()
+        layoutCache.removeAll()
+        cellParseCache.removeAllObjects()
+        accessCounter = 0
+        
+        MarkdownLogger.debug(.table, "sizeCache clearAll evicted=\(count) (cellParseCache auto-managed)")
+    }
+    
+    @objc private func handleMemoryWarning() {
+        clearAll()
+        MarkdownLogger.warning(.table, "sizeCache memory warning: cleared all caches")
     }
 }

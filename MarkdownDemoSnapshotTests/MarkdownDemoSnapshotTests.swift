@@ -11,7 +11,7 @@ final class MarkdownDemoSnapshotTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        isRecording = false
+        isRecording = ProcessInfo.processInfo.environment["SNAPSHOT_RECORDING"] == "1"
         hostWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         hostViewController = UIViewController()
         hostViewController.view.frame = hostWindow.bounds

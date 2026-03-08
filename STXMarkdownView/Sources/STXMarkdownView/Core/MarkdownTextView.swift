@@ -6,10 +6,12 @@ open class MarkdownTextView: UITextView {
     
     public var attachmentViews: [Int: AttachmentInfo] = [:] {
         didSet {
-            // Remove old views
-            oldValue.values.forEach { $0.view.removeFromSuperview() }
-            // Add new views at bottom of z-order so selection stays on top
-            attachmentViews.values.forEach { info in
+            let oldViewIDs = Set(oldValue.values.map { ObjectIdentifier($0.view) })
+            let newViewIDs = Set(attachmentViews.values.map { ObjectIdentifier($0.view) })
+            for info in oldValue.values where !newViewIDs.contains(ObjectIdentifier(info.view)) {
+                info.view.removeFromSuperview()
+            }
+            for info in attachmentViews.values where !oldViewIDs.contains(ObjectIdentifier(info.view)) {
                 insertSubview(info.view, at: 0)
             }
             setNeedsLayout()
@@ -121,8 +123,8 @@ open class MarkdownTextView: UITextView {
             // Update View Frame
             if view.frame != finalRect {
                 view.frame = finalRect
+                // Perf: avoid layoutIfNeeded() here — causes recursive sync layout 3-4 levels deep
                 view.setNeedsLayout()
-                view.layoutIfNeeded()
             }
         }
     }

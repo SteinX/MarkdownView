@@ -417,7 +417,6 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     
     /// Prepare view for reuse - recycle only (no update method)
     public func prepareForReuse() {
-        // Collection view cells already handle their own cleanup via prepareForReuse
-        collectionView?.reloadData()
+        // No-op: update() handles data refresh via reloadData() when the view is reused
     }
 }

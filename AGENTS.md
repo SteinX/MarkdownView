@@ -157,3 +157,14 @@ open MarkdownDemo.xcodeproj
 - `TableCellSizeCache` has 4 independent caches (intrinsic/height/layout/cellParse) with LRU eviction
 - `ImageCache` uses CGImageSource downsampling to reduce memory; two-tier (memory + disk) with adaptive limits
 - CI runs on macOS 15 (PR tests) and macOS 14 + Xcode 15.4 (release builds)
+
+## Learning rule
+
+When discovering a reusable insight, propose an update to learning.md.
+
+Examples:
+
+- architecture decisions
+- coding conventions
+- recurring bugs
+- environment limitations

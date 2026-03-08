@@ -1,10 +1,29 @@
 import UIKit
 import Markdown
 
-/// Result of the markdown rendering including the text and view attachments.
+struct BlockDescriptor: Hashable {
+    let contentKey: AnyHashable
+    let blockIndex: Int
+}
+
 public struct RenderedMarkdown {
     public let attributedString: NSAttributedString
     public let attachments: [Int: AttachmentInfo]
+
+    var blockDescriptors: [BlockDescriptor] {
+        attachments
+            .sorted { $0.key < $1.key }
+            .enumerated()
+            .map { BlockDescriptor(contentKey: $1.value.contentKey, blockIndex: $0) }
+    }
+}
+
+func isAppendOnly(old: [BlockDescriptor], new: [BlockDescriptor]) -> Bool {
+    guard new.count >= old.count else { return false }
+    for i in 0..<old.count {
+        if old[i].contentKey != new[i].contentKey { return false }
+    }
+    return true
 }
 
 /// A public renderer that converts Markdown text into NSAttributedString.

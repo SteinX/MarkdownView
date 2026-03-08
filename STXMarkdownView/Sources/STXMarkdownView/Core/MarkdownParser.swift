@@ -409,9 +409,11 @@ struct MarkdownParser: MarkupWalker {
 
         // Try to dequeue from pool
         let view: CodeBlockView
+        var isExactMatch = false
         if let pool = attachmentPool,
            let (pooledView, exactMatch): (CodeBlockView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
+            isExactMatch = exactMatch
             if !exactMatch {
                 view.update(code: code, language: language, theme: theme, shouldHighlight: shouldHighlight)
             }
@@ -424,17 +426,21 @@ struct MarkdownParser: MarkupWalker {
             }
         }
         
-        view.translatesAutoresizingMaskIntoConstraints = false
+        let finalSize: CGSize
+        if isExactMatch, view.frame.size.height > 0 {
+            finalSize = CGSize(width: availableWidth, height: view.frame.size.height)
+        } else {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            let size = view.systemLayoutSizeFitting(
+                CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
+                withHorizontalFittingPriority: UILayoutPriority.required,
+                verticalFittingPriority: UILayoutPriority.fittingSizeLevel
+            )
+            finalSize = CGSize(width: availableWidth, height: size.height)
+            view.translatesAutoresizingMaskIntoConstraints = true
+        }
         
-        let size = view.systemLayoutSizeFitting(
-            CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
-            withHorizontalFittingPriority: UILayoutPriority.required,
-            verticalFittingPriority: UILayoutPriority.fittingSizeLevel
-        )
-        
-        let finalSize = CGSize(width: availableWidth, height: size.height)
         view.frame = CGRect(origin: .zero, size: finalSize)
-        view.translatesAutoresizingMaskIntoConstraints = true
         insertAttachment(view: view, size: finalSize, isBlock: true, contentKey: contentKey)
     }
     
@@ -472,9 +478,11 @@ struct MarkdownParser: MarkupWalker {
         )
         
         let view: QuoteView
+        var isExactMatch = false
         if let pool = attachmentPool,
            let (pooledView, exactMatch): (QuoteView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
             view = pooledView
+            isExactMatch = exactMatch
             if !exactMatch {
                 view.update(attributedText: attributedText, attachments: attachments, theme: theme)
             }
@@ -484,15 +492,19 @@ struct MarkdownParser: MarkupWalker {
         view.translatesAutoresizingMaskIntoConstraints = false
         view.preferredMaxLayoutWidth = availableWidth
         
-        view.frame = CGRect(x: 0, y: 0, width: availableWidth, height: 1000)
+        let finalSize: CGSize
+        if isExactMatch, view.frame.size.height > 0 {
+            finalSize = CGSize(width: availableWidth, height: view.frame.size.height)
+        } else {
+            view.frame = CGRect(x: 0, y: 0, width: availableWidth, height: 1000)
+            let size = view.systemLayoutSizeFitting(
+                CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
+                withHorizontalFittingPriority: .required,
+                verticalFittingPriority: .fittingSizeLevel
+            )
+            finalSize = CGSize(width: availableWidth, height: size.height)
+        }
         
-        let size = view.systemLayoutSizeFitting(
-            CGSize(width: availableWidth, height: UIView.layoutFittingExpandedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
-        )
-        
-        let finalSize = CGSize(width: availableWidth, height: size.height)
         view.frame = CGRect(origin: .zero, size: finalSize)
         view.preferredMaxLayoutWidth = nil
         view.translatesAutoresizingMaskIntoConstraints = true
@@ -504,10 +516,51 @@ struct MarkdownParser: MarkupWalker {
         let rowsArray = Array(table.body.rows)
         MarkdownLogger.verbose(.parser, "visit table cols=\(cellsArray.count), rows=\(rowsArray.count)")
         
-        func parseCell(_ cell: Markup) -> (NSAttributedString, [Int: AttachmentInfo]) {
+        func cellContentHash(_ cell: Markup) -> Int {
+            var hasher = Hasher()
+            func hashNode(_ node: Markup) {
+                hasher.combine(ObjectIdentifier(type(of: node)))
+                if let text = node as? Text {
+                    hasher.combine(text.string)
+                } else if let code = node as? InlineCode {
+                    hasher.combine(code.code)
+                }
+                for child in node.children {
+                    hashNode(child)
+                }
+            }
+            hashNode(cell)
+            return hasher.finalize()
+        }
+        
+        func parseCell(_ cell: Markup, isHeader: Bool = false) -> (NSAttributedString, [Int: AttachmentInfo]) {
+            let font = isHeader ? boldFont : theme.baseFont
+            
+            if let cache = tableSizeCache {
+                let hash = cellContentHash(cell)
+                if let cachedAttrString = cache.cachedCellParse(contentHash: hash, isHeader: isHeader) {
+                    return (cachedAttrString, [:])
+                }
+                
+                var parser = InlineParser(
+                    theme: theme,
+                    baseFont: font,
+                    imageHandler: imageHandler,
+                    isInsideQuote: isInsideQuote,
+                    attachmentPool: attachmentPool,
+                    isStreaming: isStreaming
+                )
+                parser.visit(cell)
+                
+                if parser.attachments.isEmpty {
+                    cache.storeCellParse(contentHash: hash, isHeader: isHeader, attributedString: parser.attributedString)
+                }
+                return (parser.attributedString, parser.attachments)
+            }
+            
             var parser = InlineParser(
                 theme: theme,
-                baseFont: theme.baseFont,
+                baseFont: font,
                 imageHandler: imageHandler,
                 isInsideQuote: isInsideQuote,
                 attachmentPool: attachmentPool,
@@ -520,16 +573,7 @@ struct MarkdownParser: MarkupWalker {
         var headerItems: [(NSAttributedString, [Int: AttachmentInfo])] = []
         
         for cell in table.head.cells {
-            var parser = InlineParser(
-                theme: theme,
-                baseFont: boldFont,
-                imageHandler: imageHandler,
-                isInsideQuote: isInsideQuote,
-                attachmentPool: attachmentPool,
-                isStreaming: isStreaming
-            )
-            parser.visit(cell)
-            headerItems.append((parser.attributedString, parser.attachments))
+            headerItems.append(parseCell(cell, isHeader: true))
         }
         
         var rowItems: [[(NSAttributedString, [Int: AttachmentInfo])]] = []
@@ -545,18 +589,24 @@ struct MarkdownParser: MarkupWalker {
         
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
         
-        let headerTexts = headerItems.map { $0.0 }
-        let rowTexts = rowItems.map { row in row.map { $0.0 } }
-        
-        let layoutResult = MarkdownTableView.computeLayout(
-            headers: headerTexts,
-            rows: rowTexts,
-            theme: theme,
-            maxWidth: availableWidth,
-            cache: tableSizeCache
-        )
-
         let dataHash = tableDataHash(headers: headerItems, rows: rowItems)
+
+        let layoutResult: MarkdownTableLayoutResult
+        if let cached = tableSizeCache?.cachedLayout(dataHash: dataHash, width: availableWidth) {
+            layoutResult = cached
+        } else {
+            let headerTexts = headerItems.map { $0.0 }
+            let rowTexts = rowItems.map { row in row.map { $0.0 } }
+            layoutResult = MarkdownTableView.computeLayout(
+                headers: headerTexts,
+                rows: rowTexts,
+                theme: theme,
+                maxWidth: availableWidth,
+                cache: tableSizeCache
+            )
+            tableSizeCache?.storeLayout(layoutResult, dataHash: dataHash, width: availableWidth)
+        }
+
         let contentKey = MarkdownTableContentKey(
             dataHash: dataHash,
             width: availableWidth,

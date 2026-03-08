@@ -99,15 +99,15 @@ public class QuoteView: UIView, Reusable {
             let totalSidePadding = borderWidth + padding + 8
             let innerWidth = width - totalSidePadding
 
-            if widthConstraint == nil {
+            if let constraint = widthConstraint {
+                constraint.constant = innerWidth
+                constraint.isActive = true
+            } else {
                 widthConstraint = textView.widthAnchor.constraint(equalToConstant: innerWidth)
                 widthConstraint?.isActive = true
-            } else {
-                widthConstraint?.constant = innerWidth
             }
         } else {
             widthConstraint?.isActive = false
-            widthConstraint = nil
         }
     }
 
@@ -118,7 +118,6 @@ public class QuoteView: UIView, Reusable {
     public func prepareForReuse() {
         textView.cleanUp()
         widthConstraint?.isActive = false
-        widthConstraint = nil
     }
 }
 

@@ -1,5 +1,6 @@
 import UIKit
 import Markdown
+import os
 
 /// A UITextView subclass that renders Markdown content with custom attachments.
 /// This is the main entry point for displaying Markdown in your UI.
@@ -7,6 +8,10 @@ import Markdown
 open class MarkdownView: MarkdownTextView {
     
     // MARK: - Configuration
+    
+    private static let renderSignposter = OSSignposter(
+        subsystem: "com.stx.markdown", category: "Rendering"
+    )
     
     public var theme: MarkdownTheme = .default {
         didSet {
@@ -68,6 +73,9 @@ open class MarkdownView: MarkdownTextView {
     private let _attachmentPool = AttachmentPool()
     private var lastRenderWasStreaming: Bool = false
     private let tableSizeCache = TableCellSizeCache()
+    private var lastRenderedMarkdown: String?
+    private var previousRenderedString: NSAttributedString?
+    private(set) var lastRenderedResult: RenderedMarkdown?
     
     // Streaming throttle state
     private var pendingMarkdown: String?
@@ -137,7 +145,15 @@ open class MarkdownView: MarkdownTextView {
     }
     
     private func render(with width: CGFloat) {
-            lastRenderedWidth = width
+        // O5: Skip render if markdown content is identical to last render at same width
+        if markdown == lastRenderedMarkdown && abs(width - lastRenderedWidth) < CGFloat.ulpOfOne {
+            return
+        }
+        lastRenderedWidth = width
+        
+        let signpostID = Self.renderSignposter.makeSignpostID()
+        let signpostState = Self.renderSignposter.beginInterval("Render", id: signpostID)
+        defer { Self.renderSignposter.endInterval("Render", signpostState) }
         
         MarkdownLogger.info(.view, "render started, width=\(Int(width)), streaming=\(isStreaming)")
         
@@ -145,32 +161,28 @@ open class MarkdownView: MarkdownTextView {
         // IMPORTANT: Must set height to large value to allow layout manager to calculate used rect
         textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         
-        // Recycle old attachments back to pool
-        if !attachmentViews.isEmpty {
-            MarkdownLogger.debug(.pool, "recycle attachments count=\(attachmentViews.count)")
-        }
+        let oldAttachments = attachmentViews
         let recycleToStreamingPool = lastRenderWasStreaming
         lastRenderWasStreaming = isStreaming
-        _attachmentPool.logStats(context: "before recycle")
-
-        let maxPosition = attachmentViews.keys.max() ?? -1
-        attachmentViews.forEach { position, info in
-            let isTrailing = recycleToStreamingPool && position == maxPosition
-
-            info.view.removeFromSuperview()
-            _attachmentPool.recycle(info.view, anyKey: info.contentKey, isStreaming: isTrailing)
-        }
-        attachmentViews.removeAll()
-        _attachmentPool.logStats(context: "after recycle")
+        _attachmentPool.logStats(context: "before render")
         
         if markdown.isEmpty {
+            let maxPos = oldAttachments.keys.max() ?? -1
+            for (pos, info) in oldAttachments {
+                let isTrailing = recycleToStreamingPool && pos == maxPos
+                _attachmentPool.recycle(info.view, anyKey: info.contentKey, isStreaming: isTrailing)
+            }
+            attachmentViews = [:]
             attributedText = nil
+            previousRenderedString = nil
+            lastRenderedMarkdown = markdown
+            lastRenderedResult = nil
             invalidateIntrinsicContentSize()
             return
         }
         
-        // Analyze markdown for unclosed code blocks (for smart highlighting)
-        let codeBlockState = CodeBlockAnalyzer.analyze(markdown)
+        // Unclosed code fence detection only matters during streaming
+        let codeBlockState: CodeBlockAnalyzer.CodeBlockState? = isStreaming ? CodeBlockAnalyzer.analyze(markdown) : nil
         
         let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width, tableSizeCache: tableSizeCache)
         
@@ -185,15 +197,85 @@ open class MarkdownView: MarkdownTextView {
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         }
         
-        attributedText = result.attributedString
+        // Diff: preserve views whose contentKey matches between old and new renders
+        var finalAttachments = result.attachments
+        var oldByKey: [AnyHashable: [(position: Int, info: AttachmentInfo)]] = [:]
+        for (pos, info) in oldAttachments {
+            oldByKey[info.contentKey, default: []].append((position: pos, info: info))
+        }
         
-        // Force TextKit to invalidate and recalculate layout immediately
-        // This is crucial after cell reuse to avoid stale glyph positions
-        layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
-        layoutManager.ensureLayout(for: textContainer)
+        var preservedOldViewIDs = Set<ObjectIdentifier>()
+        for (newPos, newInfo) in result.attachments {
+            if var entries = oldByKey[newInfo.contentKey], !entries.isEmpty {
+                let old = entries.removeFirst()
+                oldByKey[newInfo.contentKey] = entries.isEmpty ? nil : entries
+                finalAttachments[newPos] = AttachmentInfo(
+                    view: old.info.view, contentKey: old.info.contentKey, charPosition: newPos
+                )
+                preservedOldViewIDs.insert(ObjectIdentifier(old.info.view))
+                _attachmentPool.recycle(newInfo.view, anyKey: newInfo.contentKey, isStreaming: false)
+            }
+        }
         
-        attachmentViews = result.attachments
+        let maxOldPos = oldAttachments.keys.max() ?? -1
+        for entries in oldByKey.values {
+            for entry in entries {
+                let isTrailing = recycleToStreamingPool && entry.position == maxOldPos
+                _attachmentPool.recycle(entry.info.view, anyKey: entry.info.contentKey, isStreaming: isTrailing)
+            }
+        }
+        
+        // O7: Incremental TextStorage update
+        // Use direct textStorage editing with scoped change range instead of full attributedText
+        // replacement, which triggers heavy UITextView bookkeeping and full-document layout invalidation.
+        var incrementalChangeStart: Int?
+        if let previous = previousRenderedString {
+            let newString = result.attributedString
+            let commonPrefix = findCommonPrefixLength(previous, newString)
+            let oldLen = previous.length
+            let newLen = newString.length
+            
+            if commonPrefix == oldLen && commonPrefix == newLen {
+                // Content identical, no update needed
+            } else {
+                textStorage.beginEditing()
+                let replaceRange = NSRange(location: commonPrefix, length: oldLen - commonPrefix)
+                if commonPrefix < newLen {
+                    let tail = newString.attributedSubstring(from: NSRange(location: commonPrefix, length: newLen - commonPrefix))
+                    textStorage.replaceCharacters(in: replaceRange, with: tail)
+                } else {
+                    textStorage.deleteCharacters(in: replaceRange)
+                }
+                textStorage.endEditing()
+                incrementalChangeStart = commonPrefix
+            }
+        } else {
+            attributedText = result.attributedString
+        }
+        previousRenderedString = result.attributedString
+        lastRenderedMarkdown = markdown
+        
+        // O6+O7: Scoped layout invalidation
+        // During streaming, skip entirely — layoutIfNeeded() in executeThrottledRender() handles it.
+        // For non-streaming with incremental update, only invalidate from the change point forward.
+        // For non-streaming with full replacement (first render), invalidate entire range.
+        if !isStreaming {
+            if let changeStart = incrementalChangeStart {
+                let changedRange = NSRange(location: changeStart, length: textStorage.length - changeStart)
+                layoutManager.invalidateLayout(forCharacterRange: changedRange, actualCharacterRange: nil)
+                layoutManager.ensureLayout(for: textContainer)
+            } else {
+                layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
+                layoutManager.ensureLayout(for: textContainer)
+            }
+        }
+        
+        attachmentViews = finalAttachments
+        lastRenderedResult = RenderedMarkdown(attributedString: result.attributedString, attachments: finalAttachments)
         _attachmentPool.logStats(context: "after render")
+        
+        let maxPoolRetention = max(finalAttachments.count * 2, 10)
+        _attachmentPool.trimToSize(maxPoolRetention)
         
         // Force intrinsic size recalculation
         invalidateIntrinsicContentSize()
@@ -210,7 +292,9 @@ open class MarkdownView: MarkdownTextView {
         // If timer already running, wait for it to trigger (don't create new one)
         guard throttleTimer == nil else { return }
         
-        // Create throttle timer
+        // Leading edge: render immediately on first update, then throttle subsequent
+        executeThrottledRender()
+        
         throttleTimer = Timer.scheduledTimer(
             withTimeInterval: throttleInterval,
             repeats: false
@@ -274,18 +358,56 @@ open class MarkdownView: MarkdownTextView {
     
     // MARK: - Cleanup
     
+    func findCommonPrefixLength(_ a: NSAttributedString, _ b: NSAttributedString) -> Int {
+        let minLen = min(a.length, b.length)
+        guard minLen > 0 else { return 0 }
+        
+        let aStr = a.string as NSString
+        let bStr = b.string as NSString
+        
+        var textPrefixLen = 0
+        while textPrefixLen < minLen && aStr.character(at: textPrefixLen) == bStr.character(at: textPrefixLen) {
+            textPrefixLen += 1
+        }
+        guard textPrefixLen > 0 else { return 0 }
+        
+        // Walk attribute runs to find first divergence within the text prefix.
+        // Each attributes(at:effectiveRange:) returns the full run, so this is O(runs) not O(chars).
+        var pos = 0
+        while pos < textPrefixLen {
+            var aRange = NSRange()
+            var bRange = NSRange()
+            let aAttrs = a.attributes(at: pos, effectiveRange: &aRange)
+            let bAttrs = b.attributes(at: pos, effectiveRange: &bRange)
+            
+            if !NSDictionary(dictionary: aAttrs).isEqual(to: bAttrs) {
+                return pos
+            }
+            
+            let aRunEnd = min(aRange.location + aRange.length, textPrefixLen)
+            let bRunEnd = min(bRange.location + bRange.length, textPrefixLen)
+            pos = min(aRunEnd, bRunEnd)
+        }
+        
+        return textPrefixLen
+    }
+    
     /// Call this before reusing the view (e.g., in prepareForReuse)
     public override func cleanUp() {
         super.cleanUp()
         markdown = ""
         cachedDocument = nil
         lastRenderedWidth = 0
+        lastRenderedMarkdown = nil
+        previousRenderedString = nil
         
-        // Clean up throttle state
         throttleTimer?.invalidate()
         throttleTimer = nil
         pendingMarkdown = nil
         lastRenderWasStreaming = false
+        
+        tableSizeCache.clearAll()
+        _attachmentPool.trimToSize(0)
     }
 
 }
