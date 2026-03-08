@@ -15,12 +15,14 @@ open class MarkdownView: MarkdownTextView {
     
     public var theme: MarkdownTheme = .default {
         didSet {
+            invalidateRenderInputCache()
             renderIfReady()
         }
     }
     
     public var imageHandler: MarkdownImageHandler = DefaultImageHandler() {
         didSet {
+            invalidateRenderInputCache()
             renderIfReady()
         }
     }
@@ -76,6 +78,8 @@ open class MarkdownView: MarkdownTextView {
     private var lastRenderedMarkdown: String?
     private var previousRenderedString: NSAttributedString?
     private(set) var lastRenderedResult: RenderedMarkdown?
+    private var renderInputVersion: Int = 0
+    private var lastRenderedInputVersion: Int = -1
     
     // Streaming throttle state
     private var pendingMarkdown: String?
@@ -146,7 +150,9 @@ open class MarkdownView: MarkdownTextView {
     
     private func render(with width: CGFloat) {
         // O5: Skip render if markdown content is identical to last render at same width
-        if markdown == lastRenderedMarkdown && abs(width - lastRenderedWidth) < CGFloat.ulpOfOne {
+        if markdown == lastRenderedMarkdown,
+           abs(width - lastRenderedWidth) < CGFloat.ulpOfOne,
+           renderInputVersion == lastRenderedInputVersion {
             return
         }
         lastRenderedWidth = width
@@ -254,6 +260,7 @@ open class MarkdownView: MarkdownTextView {
         }
         previousRenderedString = result.attributedString
         lastRenderedMarkdown = markdown
+        lastRenderedInputVersion = renderInputVersion
         
         // O6+O7: Scoped layout invalidation
         // During streaming, skip entirely — layoutIfNeeded() in executeThrottledRender() handles it.
@@ -281,6 +288,10 @@ open class MarkdownView: MarkdownTextView {
         invalidateIntrinsicContentSize()
         
         MarkdownLogger.debug(.view, "render completed, attachments=\(result.attachments.count)")
+    }
+
+    private func invalidateRenderInputCache() {
+        renderInputVersion &+= 1
     }
     
     // MARK: - Streaming Throttle

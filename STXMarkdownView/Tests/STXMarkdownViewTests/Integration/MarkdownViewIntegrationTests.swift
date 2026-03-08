@@ -111,6 +111,38 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         XCTAssertEqual(sut.textContainer.size.width, 300, accuracy: 0.5)
     }
 
+    func testThemeUpdateRerendersWithoutMarkdownOrWidthChange() {
+        sut.markdown = "**Bold**"
+        sut.layoutIfNeeded()
+
+        let originalResult = sut.lastRenderedResult
+        XCTAssertNotNil(originalResult)
+
+        sut.theme = makeDarkTestTheme()
+        sut.layoutIfNeeded()
+
+        let updatedResult = sut.lastRenderedResult
+        XCTAssertNotNil(updatedResult)
+        XCTAssertFalse(originalResult === updatedResult, "Theme changes should invalidate render skip cache and produce a fresh render result")
+    }
+
+    func testImageHandlerUpdateRerendersWithoutMarkdownOrWidthChange() throws {
+        let fileURL = try writeTempImageFile()
+        sut.markdown = "![Image](\(fileURL.absoluteString))"
+        sut.layoutIfNeeded()
+
+        let originalResult = sut.lastRenderedResult
+        XCTAssertNotNil(originalResult)
+
+        let newHandler = MockImageHandler()
+        sut.imageHandler = newHandler
+        sut.layoutIfNeeded()
+
+        let updatedResult = sut.lastRenderedResult
+        XCTAssertNotNil(updatedResult)
+        XCTAssertFalse(originalResult === updatedResult, "Image handler changes should invalidate render skip cache and produce a fresh render result")
+    }
+
     // MARK: - findCommonPrefixLength Correctness (Wave 1)
 
     func testFindCommonPrefixLength_detectsDivergenceBetweenSamplePoints() {
