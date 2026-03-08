@@ -4,9 +4,10 @@ import UIKit
 /// Uses a content-keyed dictionary with time-based expiry and LRU eviction.
 public class AttachmentPool {
     private var contentPool: [AnyHashable: [(view: UIView, timestamp: Date)]] = [:]
-    private var accessOrder: [AnyHashable] = []
+    private var accessTimestamps: [AnyHashable: UInt64] = [:]
+    private var accessCounter: UInt64 = 0
     private var streamingPool: [String: UIView] = [:]
-    private let expirationInterval: TimeInterval = 30
+    private let expirationInterval: TimeInterval = 10
     private let maxPoolSize: Int
     private let lock = NSLock()
 
@@ -118,7 +119,8 @@ public class AttachmentPool {
         defer { lock.unlock() }
 
         contentPool.removeAll()
-        accessOrder.removeAll()
+        accessTimestamps.removeAll()
+        accessCounter = 0
         streamingPool.removeAll()
         hitCount = 0
         missCount = 0
@@ -143,17 +145,20 @@ public class AttachmentPool {
     }
 
     private func updateAccessOrder(_ key: AnyHashable) {
-        removeFromAccessOrder(key)
-        accessOrder.append(key)
+        accessCounter += 1
+        accessTimestamps[key] = accessCounter
     }
 
     private func removeFromAccessOrder(_ key: AnyHashable) {
-        if let index = accessOrder.firstIndex(of: key) {
-            accessOrder.remove(at: index)
-        }
+        accessTimestamps.removeValue(forKey: key)
     }
 
     private func evictIfNeeded() {
+        let totalViews = contentPool.values.reduce(0) { $0 + $1.count }
+
+        // Early return: skip expensive work when pool is well under capacity
+        guard totalViews > maxPoolSize / 2 else { return }
+
         let now = Date()
 
         var expiredRemoved = 0
@@ -175,17 +180,18 @@ public class AttachmentPool {
             expiredEvictionCount += expiredRemoved
         }
 
-        var totalViews = contentPool.values.reduce(0) { $0 + $1.count }
-        while totalViews > maxPoolSize, let oldest = accessOrder.first {
+        var currentTotal = contentPool.values.reduce(0) { $0 + $1.count }
+        while currentTotal > maxPoolSize,
+              let oldest = accessTimestamps.min(by: { $0.value < $1.value })?.key {
             if let removed = contentPool.removeValue(forKey: oldest) {
-                totalViews -= removed.count
+                currentTotal -= removed.count
                 lruEvictionCount += removed.count
             }
-            accessOrder.removeFirst()
+            accessTimestamps.removeValue(forKey: oldest)
         }
 
         if expiredRemoved > 0 || lruEvictionCount > 0 {
-            MarkdownLogger.debug(.pool, "evict expired=\(expiredRemoved), lruTotal=\(lruEvictionCount), keys=\(contentPool.count), views=\(totalViews)")
+            MarkdownLogger.debug(.pool, "evict expired=\(expiredRemoved), lruTotal=\(lruEvictionCount), keys=\(contentPool.count), views=\(currentTotal)")
         }
     }
 
@@ -193,16 +199,52 @@ public class AttachmentPool {
         lock.lock()
         defer { lock.unlock() }
 
-        let evictCount = accessOrder.count / 2
-        for key in accessOrder.prefix(evictCount) {
+        let sortedKeys = accessTimestamps.sorted { $0.value < $1.value }.map(\.key)
+        let evictCount = sortedKeys.count / 2
+        for key in sortedKeys.prefix(evictCount) {
             contentPool.removeValue(forKey: key)
+            accessTimestamps.removeValue(forKey: key)
         }
-        accessOrder.removeFirst(min(evictCount, accessOrder.count))
         streamingPool.removeAll()
         streamingHitCount = 0
         streamingRecycleCount = 0
 
         MarkdownLogger.warning(.pool, "memory warning: evicted \(evictCount), remaining=\(contentPool.count)")
+    }
+    
+    /// Proactively trim pool to the given target size, evicting LRU entries.
+    /// Call after render to keep memory bounded proportional to active content.
+    public func trimToSize(_ targetSize: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        var currentTotal = contentPool.values.reduce(0) { $0 + $1.count }
+        guard currentTotal > targetSize else { return }
+        
+        let now = Date()
+        for (key, values) in contentPool {
+            let filtered = values.filter {
+                now.timeIntervalSince($0.timestamp) <= expirationInterval
+            }
+            if filtered.isEmpty {
+                contentPool.removeValue(forKey: key)
+                removeFromAccessOrder(key)
+            } else if filtered.count != values.count {
+                contentPool[key] = filtered
+            }
+        }
+        
+        currentTotal = contentPool.values.reduce(0) { $0 + $1.count }
+        while currentTotal > targetSize,
+              let oldest = accessTimestamps.min(by: { $0.value < $1.value })?.key {
+            if let removed = contentPool.removeValue(forKey: oldest) {
+                currentTotal -= removed.count
+                lruEvictionCount += removed.count
+            }
+            accessTimestamps.removeValue(forKey: oldest)
+        }
+        
+        MarkdownLogger.debug(.pool, "trimToSize target=\(targetSize), remaining=\(currentTotal)")
     }
 }
 

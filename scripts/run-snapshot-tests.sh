@@ -4,8 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PROJECT="MarkdownDemo.xcodeproj"
+PROJECT=""
 SCHEME="MarkdownDemoSnapshotTests"
+
+if [ -d "MarkdownDemo.xcodeproj" ]; then
+  PROJECT="MarkdownDemo.xcodeproj"
+elif [ -d ".MarkdownDemo.xcodeproj.hidden" ]; then
+  PROJECT=".MarkdownDemo.xcodeproj.hidden"
+  echo "Detected hidden project directory, using: $PROJECT"
+else
+  echo "Error: neither MarkdownDemo.xcodeproj nor .MarkdownDemo.xcodeproj.hidden exists." >&2
+  exit 1
+fi
 
 detect_simulator() {
   local available_sims
@@ -23,22 +33,13 @@ SIMULATOR_NAME="${SIMULATOR_NAME:-$(detect_simulator)}"
 DESTINATION="platform=iOS Simulator,name=$SIMULATOR_NAME"
 echo "Using simulator: $SIMULATOR_NAME"
 
+SNAPSHOT_RECORDING="0"
 if [ "${1:-}" = "--record" ]; then
-  swift -e 'import Foundation
-let url = URL(fileURLWithPath: "MarkdownDemoSnapshotTests/MarkdownDemoSnapshotTests.swift")
-let text = try String(contentsOf: url)
-let updated = text.replacingOccurrences(of: "isRecording = false", with: "isRecording = true")
-try updated.write(to: url, atomically: true, encoding: .utf8)
-'
-  echo "Recording mode enabled in MarkdownDemoSnapshotTests.swift"
+  SNAPSHOT_RECORDING="1"
+  echo "Recording mode enabled (SNAPSHOT_RECORDING=1)"
 else
-  swift -e 'import Foundation
-let url = URL(fileURLWithPath: "MarkdownDemoSnapshotTests/MarkdownDemoSnapshotTests.swift")
-let text = try String(contentsOf: url)
-let updated = text.replacingOccurrences(of: "isRecording = true", with: "isRecording = false")
-try updated.write(to: url, atomically: true, encoding: .utf8)
-'
-  echo "Recording mode disabled in MarkdownDemoSnapshotTests.swift"
+  echo "Recording mode disabled (SNAPSHOT_RECORDING=0)"
 fi
 
+SNAPSHOT_RECORDING="$SNAPSHOT_RECORDING" \
 xcodebuild test -project "$PROJECT" -scheme "$SCHEME" -destination "$DESTINATION"
