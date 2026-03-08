@@ -85,6 +85,10 @@ open class MarkdownView: MarkdownTextView {
     private var pendingMarkdown: String?
     private var throttleTimer: Timer?
     
+    // Intrinsic size cache: avoids ensureLayout during UITableView batch updates for stable cells
+    private var cachedIntrinsicSize: CGSize?
+    private var cachedIntrinsicSizeContainerWidth: CGFloat = -1
+    
     // MARK: - Init
     
     public override init(frame: CGRect, textContainer: NSTextContainer?) {
@@ -103,11 +107,18 @@ open class MarkdownView: MarkdownTextView {
     // MARK: - Layout
     
     open override var intrinsicContentSize: CGSize {
+        let containerWidth = textContainer.size.width
+        if let cached = cachedIntrinsicSize,
+           abs(containerWidth - cachedIntrinsicSizeContainerWidth) < CGFloat.ulpOfOne {
+            return cached
+        }
         layoutManager.ensureLayout(for: textContainer)
         let size = layoutManager.usedRect(for: textContainer).size
         let insets = textContainerInset
         let finalSize = CGSize(width: ceil(size.width + insets.left + insets.right), 
                       height: ceil(size.height + insets.top + insets.bottom + 1))
+        cachedIntrinsicSize = finalSize
+        cachedIntrinsicSizeContainerWidth = containerWidth
         return finalSize
     }
     
@@ -183,6 +194,7 @@ open class MarkdownView: MarkdownTextView {
             previousRenderedString = nil
             lastRenderedMarkdown = markdown
             lastRenderedResult = nil
+            cachedIntrinsicSize = nil
             invalidateIntrinsicContentSize()
             return
         }
@@ -285,6 +297,7 @@ open class MarkdownView: MarkdownTextView {
         _attachmentPool.trimToSize(maxPoolRetention)
         
         // Force intrinsic size recalculation
+        cachedIntrinsicSize = nil
         invalidateIntrinsicContentSize()
         
         MarkdownLogger.debug(.view, "render completed, attachments=\(result.attachments.count)")
@@ -411,6 +424,7 @@ open class MarkdownView: MarkdownTextView {
         lastRenderedWidth = 0
         lastRenderedMarkdown = nil
         previousRenderedString = nil
+        cachedIntrinsicSize = nil
         
         throttleTimer?.invalidate()
         throttleTimer = nil
