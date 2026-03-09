@@ -2,6 +2,7 @@ import UIKit
 import STXMarkdownView
 
 class ChatBubbleCell: UITableViewCell {
+    private static let widthEpsilon: CGFloat = 0.5
     
     private let bubbleView = UIView()
     private let markdownView = MarkdownView()
@@ -19,7 +20,8 @@ class ChatBubbleCell: UITableViewCell {
         super.layoutSubviews()
         
         let availableWidth = contentView.bounds.width - 32 - 24
-        if availableWidth > 0 && markdownView.preferredMaxLayoutWidth != availableWidth {
+        if availableWidth > 0,
+           abs(markdownView.preferredMaxLayoutWidth - availableWidth) > Self.widthEpsilon {
             markdownView.preferredMaxLayoutWidth = availableWidth
             // 如果宽度变化且有内容，需要触发重新布局
             if currentMarkdown != nil {
@@ -69,7 +71,8 @@ class ChatBubbleCell: UITableViewCell {
         
         // 如果此时已有正确的宽度，直接设置
         let availableWidth = contentView.bounds.width - 32 - 24
-        if availableWidth > 0 {
+        if availableWidth > 0,
+           abs(markdownView.preferredMaxLayoutWidth - availableWidth) > Self.widthEpsilon {
             markdownView.preferredMaxLayoutWidth = availableWidth
         }
 
