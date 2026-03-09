@@ -6,6 +6,7 @@ import os
 /// This is the main entry point for displaying Markdown in your UI.
 /// Extends MarkdownTextView to inherit attachment layout handling.
 open class MarkdownView: MarkdownTextView {
+    private static let widthEpsilon: CGFloat = 0.5
     
     // MARK: - Configuration
     
@@ -33,7 +34,6 @@ open class MarkdownView: MarkdownTextView {
             MarkdownLogger.info(.streaming, "streaming state changed -> \(isStreaming)")
             _attachmentPool.logStats(context: "streaming toggle")
             if !isStreaming && oldValue {
-                // Stream ended: cleanup timer and ensure final render
                 finalizeStreamingRender()
             }
         }
@@ -109,7 +109,7 @@ open class MarkdownView: MarkdownTextView {
     open override var intrinsicContentSize: CGSize {
         let containerWidth = textContainer.size.width
         if let cached = cachedIntrinsicSize,
-           abs(containerWidth - cachedIntrinsicSizeContainerWidth) < CGFloat.ulpOfOne {
+           abs(containerWidth - cachedIntrinsicSizeContainerWidth) <= Self.widthEpsilon {
             return cached
         }
         layoutManager.ensureLayout(for: textContainer)
@@ -143,7 +143,7 @@ open class MarkdownView: MarkdownTextView {
         let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
         
         if width > 0 && !markdown.isEmpty {
-            let widthChanged = abs(width - lastRenderedWidth) > CGFloat.ulpOfOne
+            let widthChanged = abs(width - lastRenderedWidth) > Self.widthEpsilon
             if widthChanged {
                 render(with: width)
             }
@@ -162,7 +162,7 @@ open class MarkdownView: MarkdownTextView {
     private func render(with width: CGFloat) {
         // O5: Skip render if markdown content is identical to last render at same width
         if markdown == lastRenderedMarkdown,
-           abs(width - lastRenderedWidth) < CGFloat.ulpOfOne,
+           abs(width - lastRenderedWidth) <= Self.widthEpsilon,
            renderInputVersion == lastRenderedInputVersion {
             return
         }
@@ -174,8 +174,6 @@ open class MarkdownView: MarkdownTextView {
         
         MarkdownLogger.info(.view, "render started, width=\(Int(width)), streaming=\(isStreaming)")
         
-        // Set text container width for correct intrinsic size calculation
-        // IMPORTANT: Must set height to large value to allow layout manager to calculate used rect
         textContainer.size = CGSize(width: width, height: .greatestFiniteMagnitude)
         
         let oldAttachments = attachmentViews
@@ -199,23 +197,21 @@ open class MarkdownView: MarkdownTextView {
             return
         }
         
-        // Unclosed code fence detection only matters during streaming
         let codeBlockState: CodeBlockAnalyzer.CodeBlockState? = isStreaming ? CodeBlockAnalyzer.analyze(markdown) : nil
         
         let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width, tableSizeCache: tableSizeCache)
         
+        // Phase 1: Parse
         let result: RenderedMarkdown
         if let document = cachedDocument {
-            // Reuse cached AST
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         } else {
-            // Parse and cache
             let document = renderer.parse(markdown)
             cachedDocument = document
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         }
         
-        // Diff: preserve views whose contentKey matches between old and new renders
+        // Phase 3: O6 Diff
         var finalAttachments = result.attachments
         var oldByKey: [AnyHashable: [(position: Int, info: AttachmentInfo)]] = [:]
         for (pos, info) in oldAttachments {
@@ -243,9 +239,7 @@ open class MarkdownView: MarkdownTextView {
             }
         }
         
-        // O7: Incremental TextStorage update
-        // Use direct textStorage editing with scoped change range instead of full attributedText
-        // replacement, which triggers heavy UITextView bookkeeping and full-document layout invalidation.
+        // Phase 4: O7 Incremental TextStorage update
         var incrementalChangeStart: Int?
         if let previous = previousRenderedString {
             let newString = result.attributedString
@@ -254,7 +248,7 @@ open class MarkdownView: MarkdownTextView {
             let newLen = newString.length
             
             if commonPrefix == oldLen && commonPrefix == newLen {
-                // Content identical, no update needed
+                // Content identical
             } else {
                 textStorage.beginEditing()
                 let replaceRange = NSRange(location: commonPrefix, length: oldLen - commonPrefix)
@@ -270,24 +264,20 @@ open class MarkdownView: MarkdownTextView {
         } else {
             attributedText = result.attributedString
         }
+        
         previousRenderedString = result.attributedString
         lastRenderedMarkdown = markdown
         lastRenderedInputVersion = renderInputVersion
         
-        // O6+O7: Scoped layout invalidation
-        // During streaming, skip entirely — layoutIfNeeded() in executeThrottledRender() handles it.
-        // For non-streaming with incremental update, only invalidate from the change point forward.
-        // For non-streaming with full replacement (first render), invalidate entire range.
-        if !isStreaming {
-            if let changeStart = incrementalChangeStart {
-                let changedRange = NSRange(location: changeStart, length: textStorage.length - changeStart)
-                layoutManager.invalidateLayout(forCharacterRange: changedRange, actualCharacterRange: nil)
-                layoutManager.ensureLayout(for: textContainer)
-            } else {
-                layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
-                layoutManager.ensureLayout(for: textContainer)
-            }
+        // Phase 5: Layout + intrinsic size computation + attachment assignment
+        
+        if let changeStart = incrementalChangeStart {
+            let changedRange = NSRange(location: changeStart, length: textStorage.length - changeStart)
+            layoutManager.invalidateLayout(forCharacterRange: changedRange, actualCharacterRange: nil)
+        } else {
+            layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
         }
+        layoutManager.ensureLayout(for: textContainer)
         
         attachmentViews = finalAttachments
         lastRenderedResult = RenderedMarkdown(attributedString: result.attributedString, attachments: finalAttachments)
@@ -296,9 +286,23 @@ open class MarkdownView: MarkdownTextView {
         let maxPoolRetention = max(finalAttachments.count * 2, 10)
         _attachmentPool.trimToSize(maxPoolRetention)
         
-        // Force intrinsic size recalculation
-        cachedIntrinsicSize = nil
-        invalidateIntrinsicContentSize()
+        let usedSize = layoutManager.usedRect(for: textContainer).size
+        let insets = textContainerInset
+        let newHeight = ceil(usedSize.height + insets.top + insets.bottom + 1)
+        let newWidth = ceil(usedSize.width + insets.left + insets.right)
+        let newICS = CGSize(width: newWidth, height: newHeight)
+        
+        let previousHeight = cachedIntrinsicSize?.height ?? -1
+        cachedIntrinsicSize = newICS
+        cachedIntrinsicSizeContainerWidth = textContainer.size.width
+        
+        if isStreaming {
+            if abs(newHeight - previousHeight) > 0.5 {
+                invalidateIntrinsicContentSize()
+            }
+        } else {
+            invalidateIntrinsicContentSize()
+        }
         
         MarkdownLogger.debug(.view, "render completed, attachments=\(result.attachments.count)")
     }
@@ -342,24 +346,27 @@ open class MarkdownView: MarkdownTextView {
         let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
         if width > 0 {
             render(with: width)
-            // Flush layout immediately: render() leaves attachment views at (0,0) until
-            // the next vsync; skipping this causes images to float during streaming.
-            layoutIfNeeded()
+            // O9: Defer layout to parent's next pass instead of flushing immediately.
+            // In UITableView, performBatchUpdates triggers layout after this returns;
+            // flushing here would cause a redundant double-layout every tick.
+            // ICS is already cached in Phase 5, so parent can query height without layout.
+            setNeedsLayout()
         } else {
             setNeedsLayout()
         }
     }
     
     private func finalizeStreamingRender() {
-        // Cancel pending timer
         throttleTimer?.invalidate()
         throttleTimer = nil
         
-        // If there's unrendered content, render it immediately
         if pendingMarkdown != nil {
             pendingMarkdown = nil
             cachedDocument = nil
             renderIfReady()
+        } else {
+            cachedIntrinsicSize = nil
+            invalidateIntrinsicContentSize()
         }
     }
 
@@ -374,7 +381,7 @@ open class MarkdownView: MarkdownTextView {
         }
 
         textContainer.widthTracksTextView = false
-        if abs(textContainer.size.width - preferredMaxLayoutWidth) > CGFloat.ulpOfOne
+        if abs(textContainer.size.width - preferredMaxLayoutWidth) > Self.widthEpsilon
             || textContainer.size.height < .greatestFiniteMagnitude {
             textContainer.size = CGSize(width: preferredMaxLayoutWidth, height: .greatestFiniteMagnitude)
         }

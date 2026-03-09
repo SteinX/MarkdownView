@@ -34,6 +34,14 @@ class ViewController: UIViewController, UITableViewDataSource {
     
     private var streamingSimulator: StreamingSimulator?
     private var isStreaming = false
+    private var lastTableUpdateTime: CFTimeInterval = 0
+    private var pendingTableUpdate = false
+    private var pendingShouldStickToBottom = false
+    private let tableUpdateInterval: CFTimeInterval = 1.0
+    private var lastCellUpdateTime: CFTimeInterval = 0
+    private var pendingCellUpdate = false
+    private var latestStreamingText = ""
+    private let cellUpdateInterval: CFTimeInterval = 0.25
 
     let markdownContent = """
     # Markdown syntax guide
@@ -384,6 +392,12 @@ class ViewController: UIViewController, UITableViewDataSource {
     
     private func startStreaming() {
         isStreaming = true
+        lastTableUpdateTime = 0
+        pendingTableUpdate = false
+        pendingShouldStickToBottom = false
+        lastCellUpdateTime = 0
+        pendingCellUpdate = false
+        latestStreamingText = ""
         streamButton.setTitle("Stop", for: .normal)
         streamButton.backgroundColor = .systemRed
         
@@ -398,9 +412,8 @@ class ViewController: UIViewController, UITableViewDataSource {
         
         // Enable streaming mode for throttled rendering
         if let cell = self.tableView.cellForRow(at: newIndexPath) as? ChatBubbleCell {
+            cell.setThrottleInterval(0.2)
             cell.setStreaming(true)
-            // Optional: Customize throttle interval (default is 100ms)
-            // cell.setThrottleInterval(0.15)
         }
         
         // Use the same content for demo, but streamed
@@ -409,42 +422,25 @@ class ViewController: UIViewController, UITableViewDataSource {
         streamingSimulator?.start(onUpdate: { [weak self] currentText in
             guard let self = self else { return }
             
-            // Update data source
+            self.latestStreamingText = currentText
             self.messages[self.messages.count - 1] = currentText
-            
-            // Update cell if visible
-            let lastIndexPath = IndexPath(row: self.messages.count - 1, section: 0)
-            if let cell = self.tableView.cellForRow(at: lastIndexPath) as? ChatBubbleCell {
-                // Check if we are near the bottom BEFORE updating the cell height
-                // This determines if we should "stick" to the bottom after the update
-                let threshold: CGFloat = 20.0
-                let contentHeight = self.tableView.contentSize.height
-                let boundsHeight = self.tableView.bounds.size.height
-                let currentOffset = self.tableView.contentOffset.y
-                let maxOffset = max(0, contentHeight - boundsHeight)
-                let isNearBottom = (maxOffset - currentOffset) <= threshold
-                
-                cell.configure(with: currentText)
-                
-                // Animate height change smoothly
-                UIView.setAnimationsEnabled(false)
-                self.tableView.performBatchUpdates(nil)
-                UIView.setAnimationsEnabled(true)
-                
-                // Only scroll to bottom if user is not manually scrolling AND was already near bottom
-                if !self.tableView.isDragging && !self.tableView.isTracking && isNearBottom {
-                     self.tableView.scrollToRow(at: lastIndexPath, at: .bottom, animated: false)
-                }
+
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - self.lastCellUpdateTime >= self.cellUpdateInterval {
+                self.applyCellUpdateIfNeeded(force: false)
             } else {
-                 // Cell not visible, likely scrolled up. No need to force scroll.
+                self.pendingCellUpdate = true
             }
         }, onComplete: { [weak self] in
+            self?.applyCellUpdateIfNeeded(force: true)
             self?.stopStreaming()
         })
     }
     
     private func stopStreaming() {
         isStreaming = false
+        applyCellUpdateIfNeeded(force: true)
+        flushPendingTableUpdate()
         streamButton.setTitle("Start Stream", for: .normal)
         streamButton.backgroundColor = .systemBlue
         
@@ -452,10 +448,73 @@ class ViewController: UIViewController, UITableViewDataSource {
         let lastIndexPath = IndexPath(row: messages.count - 1, section: 0)
         if let cell = self.tableView.cellForRow(at: lastIndexPath) as? ChatBubbleCell {
             cell.setStreaming(false)
+            cell.setThrottleInterval(0.1)
         }
         
         streamingSimulator?.stop()
         streamingSimulator = nil
+    }
+
+    private func applyCellUpdateIfNeeded(force: Bool) {
+        if !force && !pendingCellUpdate {
+            return
+        }
+
+        let lastIndexPath = IndexPath(row: messages.count - 1, section: 0)
+        guard let cell = tableView.cellForRow(at: lastIndexPath) as? ChatBubbleCell else {
+            if force {
+                pendingCellUpdate = false
+                lastCellUpdateTime = CFAbsoluteTimeGetCurrent()
+            }
+            return
+        }
+
+        let shouldStickToBottom = isUserNearBottom()
+        cell.configure(with: latestStreamingText)
+        pendingCellUpdate = false
+        lastCellUpdateTime = CFAbsoluteTimeGetCurrent()
+        scheduleTableUpdateIfNeeded(shouldStickToBottom: shouldStickToBottom)
+    }
+
+    private func isUserNearBottom() -> Bool {
+        let threshold: CGFloat = 20.0
+        let contentHeight = tableView.contentSize.height
+        let boundsHeight = tableView.bounds.height
+        let currentOffset = tableView.contentOffset.y
+        let maxOffset = max(0, contentHeight - boundsHeight)
+        return (maxOffset - currentOffset) <= threshold
+    }
+
+    private func scheduleTableUpdateIfNeeded(shouldStickToBottom: Bool) {
+        pendingShouldStickToBottom = pendingShouldStickToBottom || shouldStickToBottom
+
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - lastTableUpdateTime >= tableUpdateInterval {
+            performTableUpdate()
+        } else {
+            pendingTableUpdate = true
+        }
+    }
+
+    private func performTableUpdate() {
+        lastTableUpdateTime = CFAbsoluteTimeGetCurrent()
+        pendingTableUpdate = false
+
+        UIView.performWithoutAnimation {
+            tableView.performBatchUpdates(nil)
+        }
+
+        if pendingShouldStickToBottom && !tableView.isDragging && !tableView.isTracking {
+            let lastIndexPath = IndexPath(row: messages.count - 1, section: 0)
+            tableView.scrollToRow(at: lastIndexPath, at: .bottom, animated: false)
+        }
+        pendingShouldStickToBottom = false
+    }
+
+    private func flushPendingTableUpdate() {
+        if pendingTableUpdate {
+            performTableUpdate()
+        }
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {

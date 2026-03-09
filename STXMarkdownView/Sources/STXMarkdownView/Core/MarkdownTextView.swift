@@ -4,11 +4,7 @@ import UIKit
 /// Used by MarkdownView, QuoteView, and MarkdownTableView for consistent attachment layout.
 open class MarkdownTextView: UITextView {
     
-    // MARK: - Attachment Layout Tracking
-    
-    /// When false, layoutSubviews skips the expensive attachment positioning loop.
-    /// Set to true when attachmentViews changes, textStorage is edited, or bounds width changes.
-    private var needsAttachmentLayout: Bool = true
+    private(set) var needsAttachmentLayout = false
     private var lastAttachmentLayoutWidth: CGFloat = -1
     
     public var attachmentViews: [Int: AttachmentInfo] = [:] {
@@ -98,12 +94,15 @@ open class MarkdownTextView: UITextView {
     
     open override func layoutSubviews() {
         super.layoutSubviews()
+
         restoreTextContainerConfiguration()
         
         let currentWidth = bounds.width
         let widthChanged = abs(currentWidth - lastAttachmentLayoutWidth) > CGFloat.ulpOfOne
         
-        guard needsAttachmentLayout || widthChanged else { return }
+        guard needsAttachmentLayout || widthChanged else {
+            return
+        }
         
         layoutManager.ensureLayout(for: textContainer)
         
@@ -131,8 +130,17 @@ open class MarkdownTextView: UITextView {
             let finalRect = rect.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
             
             if view.frame != finalRect {
+                // O8: Skip setNeedsLayout for position-only moves. UIKit automatically
+                // triggers layoutSubviews when bounds.size changes via frame assignment.
+                // During streaming, existing attachments shift down (same size, new origin)
+                // — forcing internal re-layout of tables/code blocks is unnecessary and
+                // is the primary source of ~100ms P99 layout overhead.
+                let sizeChanged = abs(view.bounds.width - finalRect.width) > 0.5
+                    || abs(view.bounds.height - finalRect.height) > 0.5
                 view.frame = finalRect
-                view.setNeedsLayout()
+                if sizeChanged {
+                    view.setNeedsLayout()
+                }
             }
         }
         

@@ -44,7 +44,7 @@ class StreamingSimulator {
         }
         
         // Randomly determine how many characters to append (1 to 3) to simulate typing variation
-        let chunkSize = Int.random(in: 1...3)
+            let chunkSize = Int.random(in: 1...3)
         
         for _ in 0..<chunkSize {
             if currentIndex < fullText.endIndex {

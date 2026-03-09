@@ -1342,6 +1342,82 @@ final class StreamingPerformanceTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // MARK: - Chat Scenario Profiling
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Profiles streaming render cost in a chat scenario with a completed cell present.
+    /// Compares per-tick timing WITH vs WITHOUT a completed MarkdownView to isolate
+    /// the overhead of UITableView-style multi-cell layout.
+    func testChatScenarioStreamingProfile() {
+        let width: CGFloat = renderWidth
+        let chunkSize = 20
+        let chunks = makeStreamingChunks(from: kFullComplexDocument, chunkSize: chunkSize)
+
+        // --- Setup: completed cell (simulates prior chat bubble) ---
+        let completedView = MarkdownView()
+        completedView.frame = CGRect(x: 0, y: 0, width: width, height: 600)
+        completedView.preferredMaxLayoutWidth = width
+        completedView.isScrollEnabled = false
+        completedView.markdown = kFullComplexDocument
+        hostWindow.addSubview(completedView)
+        completedView.layoutIfNeeded()
+
+        // --- Streaming view ---
+        let streamingView = MarkdownView()
+        streamingView.frame = CGRect(x: 0, y: 600, width: width, height: 600)
+        streamingView.preferredMaxLayoutWidth = width
+        streamingView.isScrollEnabled = false
+        hostWindow.addSubview(streamingView)
+
+        // --- Pass 1: WITH completed cell ---
+        var withCompletedProfiles: [ChatTickProfile] = []
+
+        for (i, chunk) in chunks.enumerated() {
+            let totalStart = CFAbsoluteTimeGetCurrent()
+            streamingView.markdown = chunk
+            completedView.setNeedsLayout()
+            streamingView.setNeedsLayout()
+            hostWindow.layoutIfNeeded()
+            let totalElapsed = (CFAbsoluteTimeGetCurrent() - totalStart) * 1000
+
+            withCompletedProfiles.append(ChatTickProfile(
+                index: i,
+                chars: chunk.count,
+                total: totalElapsed
+            ))
+        }
+
+        // --- Reset for Pass 2 ---
+        streamingView.cleanUp()
+        completedView.removeFromSuperview()
+
+        // --- Pass 2: WITHOUT completed cell ---
+        var withoutCompletedProfiles: [ChatTickProfile] = []
+
+        for (i, chunk) in chunks.enumerated() {
+            let totalStart = CFAbsoluteTimeGetCurrent()
+            streamingView.markdown = chunk
+            streamingView.setNeedsLayout()
+            hostWindow.layoutIfNeeded()
+            let totalElapsed = (CFAbsoluteTimeGetCurrent() - totalStart) * 1000
+
+            withoutCompletedProfiles.append(ChatTickProfile(
+                index: i,
+                chars: chunk.count,
+                total: totalElapsed
+            ))
+        }
+
+        // --- Build and attach report ---
+        let report = buildChatScenarioReport(
+            withCompleted: withCompletedProfiles,
+            withoutCompleted: withoutCompletedProfiles
+        )
+        print(report)
+        attachReport(report, name: "ChatScenarioProfile")
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1546,5 +1622,93 @@ private extension StreamingPerformanceTests {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    struct ChatTickProfile {
+        let index: Int
+        let chars: Int
+        let total: Double
+    }
+
+    func buildChatScenarioReport(
+        withCompleted: [ChatTickProfile],
+        withoutCompleted: [ChatTickProfile]
+    ) -> String {
+        var lines: [String] = []
+        lines.append("┌──────────────────────────────────────────────────────────")
+        lines.append("│ CHAT SCENARIO STREAMING PROFILE")
+        lines.append("├──────────────────────────────────────────────────────────")
+
+        let ms = { (v: Double) in String(format: "%.3f", v) }
+
+        for (label, profiles) in [("WITH completed cell", withCompleted), ("WITHOUT completed cell", withoutCompleted)] {
+            lines.append("│")
+            lines.append("│ ── \(label) ──")
+            lines.append("│ ticks: \(profiles.count)")
+
+            guard !profiles.isEmpty else { continue }
+
+            let totals = profiles.map(\.total).sorted()
+            let count = profiles.count
+
+            func percentiles(_ arr: [Double]) -> (p50: Double, p90: Double, p99: Double, maxVal: Double) {
+                let p50 = arr[count / 2]
+                let p90 = arr[Swift.max(0, Int(Double(count) * 0.9) - 1)]
+                let p99 = arr[Swift.max(0, Swift.min(Int(Double(count) * 0.99), count - 1))]
+                return (p50, p90, p99, arr.last!)
+            }
+
+            let tp = percentiles(totals)
+
+            lines.append("│")
+            lines.append("│ Per-tick total:    P50=\(ms(tp.p50))ms  P90=\(ms(tp.p90))ms  P99=\(ms(tp.p99))ms  max=\(ms(tp.maxVal))ms")
+
+            let q1End = count / 4
+            let q2End = count / 2
+            let q3End = count * 3 / 4
+
+            let quartiles = [
+                ("Q1 (0%-25%)", Array(profiles[0..<q1End])),
+                ("Q2 (25%-50%)", Array(profiles[q1End..<q2End])),
+                ("Q3 (50%-75%)", Array(profiles[q2End..<q3End])),
+                ("Q4 (75%-100%)", Array(profiles[q3End..<count]))
+            ]
+
+            lines.append("│")
+            lines.append("│ Quartile breakdown (by tick index, shows growth):")
+            for (qLabel, qProfiles) in quartiles {
+                guard !qProfiles.isEmpty else { continue }
+                let avgTotal = qProfiles.map(\.total).reduce(0, +) / Double(qProfiles.count)
+                let avgChars = qProfiles.map(\.chars).reduce(0, +) / qProfiles.count
+                lines.append("│   \(qLabel): avg=\(ms(avgTotal))ms ~\(avgChars) chars")
+            }
+
+            let overBudget = profiles.filter { $0.total > 16.67 }
+            lines.append("│")
+            lines.append("│ Over-budget (>16.67ms): \(overBudget.count)/\(count) ticks (\(String(format: "%.1f", Double(overBudget.count) / Double(count) * 100))%)")
+
+            let top5 = profiles.sorted(by: { $0.total > $1.total }).prefix(5)
+            lines.append("│ Top 5 slowest ticks:")
+            for t in top5 {
+                lines.append("│   tick[\(t.index)] \(ms(t.total))ms (\(t.chars) chars)")
+            }
+        }
+
+        lines.append("├──────────────────────────────────────────────────────────")
+        lines.append("│ COMPARISON")
+        lines.append("├──────────────────────────────────────────────────────────")
+
+        if !withCompleted.isEmpty && !withoutCompleted.isEmpty {
+            let avgWith = withCompleted.map(\.total).reduce(0, +) / Double(withCompleted.count)
+            let avgWithout = withoutCompleted.map(\.total).reduce(0, +) / Double(withoutCompleted.count)
+            let overhead = avgWith - avgWithout
+            let overheadPct = avgWithout > 0 ? (overhead / avgWithout) * 100 : 0
+            lines.append("│ Avg per-tick WITH:    \(ms(avgWith))ms")
+            lines.append("│ Avg per-tick WITHOUT: \(ms(avgWithout))ms")
+            lines.append("│ Completed-cell overhead: \(String(format: "%+.3f", overhead))ms (\(String(format: "%+.1f", overheadPct))%)")
+        }
+
+        lines.append("└──────────────────────────────────────────────────────────")
+        return lines.joined(separator: "\n")
     }
 }
