@@ -37,7 +37,7 @@ class ViewController: UIViewController, UITableViewDataSource {
     private var lastTableUpdateTime: CFTimeInterval = 0
     private var pendingTableUpdate = false
     private var pendingShouldStickToBottom = false
-    private let tableUpdateInterval: CFTimeInterval = 1.0
+    private let tableUpdateInterval: CFTimeInterval = 0.25
     private var lastCellUpdateTime: CFTimeInterval = 0
     private var pendingCellUpdate = false
     private var latestStreamingText = ""
