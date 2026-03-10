@@ -536,12 +536,14 @@ struct MarkdownParser: MarkupWalker {
             return hasher.finalize()
         }
         
+        let parseThemeSignature = tableParseThemeSignature()
+
         func parseCell(_ cell: Markup, isHeader: Bool = false) -> (NSAttributedString, [Int: AttachmentInfo]) {
             let font = isHeader ? boldFont : theme.baseFont
             
             if let cache = tableSizeCache {
                 let hash = cellContentHash(cell)
-                if let cachedAttrString = cache.cachedCellParse(contentHash: hash, isHeader: isHeader) {
+                if let cachedAttrString = cache.cachedCellParse(contentHash: hash, isHeader: isHeader, themeSignature: parseThemeSignature) {
                     return (cachedAttrString, [:])
                 }
                 
@@ -556,7 +558,7 @@ struct MarkdownParser: MarkupWalker {
                 parser.visit(cell)
                 
                 if parser.attachments.isEmpty {
-                    cache.storeCellParse(contentHash: hash, isHeader: isHeader, attributedString: parser.attributedString)
+                    cache.storeCellParse(contentHash: hash, isHeader: isHeader, themeSignature: parseThemeSignature, attributedString: parser.attributedString)
                 }
                 return (parser.attributedString, parser.attachments)
             }
@@ -712,17 +714,38 @@ struct MarkdownParser: MarkupWalker {
         hasher.combine(rows.count)
 
         for header in headers {
-            hasher.combine(header.0.string.hashValue)
+            hasher.combine(header.0.hash)
             hasher.combine(attachmentsHash(header.1))
         }
 
         for row in rows {
             hasher.combine(row.count)
             for cell in row {
-                hasher.combine(cell.0.string.hashValue)
+                hasher.combine(cell.0.hash)
                 hasher.combine(attachmentsHash(cell.1))
             }
         }
+
+        return hasher.finalize()
+    }
+
+    private func tableParseThemeSignature() -> Int {
+        var hasher = Hasher()
+
+        hasher.combine(theme.baseFont.fontName)
+        hasher.combine(theme.baseFont.pointSize)
+        hasher.combine(theme.baseFont.fontDescriptor.symbolicTraits.rawValue)
+
+        hasher.combine(boldFont.fontName)
+        hasher.combine(boldFont.pointSize)
+        hasher.combine(boldFont.fontDescriptor.symbolicTraits.rawValue)
+
+        hasher.combine(theme.colors.text.hashValue)
+        hasher.combine(theme.linkColor.hashValue)
+        hasher.combine(theme.code.font.fontName)
+        hasher.combine(theme.code.font.pointSize)
+        hasher.combine(theme.code.textColor.hashValue)
+        hasher.combine(theme.code.backgroundColor.hashValue)
 
         return hasher.finalize()
     }
