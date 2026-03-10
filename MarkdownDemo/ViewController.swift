@@ -504,7 +504,10 @@ class ViewController: UIViewController, UITableViewDataSource {
             tableView.performBatchUpdates(nil)
         }
 
-        if pendingShouldStickToBottom && !tableView.isDragging && !tableView.isTracking {
+        if pendingShouldStickToBottom
+            && !tableView.isDragging
+            && !tableView.isTracking
+            && isUserNearBottom() {
             let lastIndexPath = IndexPath(row: messages.count - 1, section: 0)
             tableView.scrollToRow(at: lastIndexPath, at: .bottom, animated: false)
         }
