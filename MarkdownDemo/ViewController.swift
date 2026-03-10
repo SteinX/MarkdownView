@@ -427,7 +427,7 @@ class ViewController: UIViewController, UITableViewDataSource {
 
             let now = CFAbsoluteTimeGetCurrent()
             if now - self.lastCellUpdateTime >= self.cellUpdateInterval {
-                self.applyCellUpdateIfNeeded(force: false)
+                self.applyCellUpdateIfNeeded(force: true)
             } else {
                 self.pendingCellUpdate = true
             }
