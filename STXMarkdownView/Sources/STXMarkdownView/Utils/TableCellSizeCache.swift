@@ -41,22 +41,27 @@ public final class TableCellSizeCache {
     private final class CellParseCacheKey: NSObject {
         let contentHash: Int
         let isHeader: Bool
+        let themeSignature: Int
 
-        init(contentHash: Int, isHeader: Bool) {
+        init(contentHash: Int, isHeader: Bool, themeSignature: Int) {
             self.contentHash = contentHash
             self.isHeader = isHeader
+            self.themeSignature = themeSignature
         }
 
         override var hash: Int {
             var hasher = Hasher()
             hasher.combine(contentHash)
             hasher.combine(isHeader)
+            hasher.combine(themeSignature)
             return hasher.finalize()
         }
 
         override func isEqual(_ object: Any?) -> Bool {
             guard let other = object as? CellParseCacheKey else { return false }
-            return contentHash == other.contentHash && isHeader == other.isHeader
+            return contentHash == other.contentHash
+                && isHeader == other.isHeader
+                && themeSignature == other.themeSignature
         }
     }
 
@@ -173,8 +178,8 @@ public final class TableCellSizeCache {
         lock.unlock()
     }
 
-    func cachedCellParse(contentHash: Int, isHeader: Bool) -> NSAttributedString? {
-        let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader)
+    func cachedCellParse(contentHash: Int, isHeader: Bool, themeSignature: Int) -> NSAttributedString? {
+        let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader, themeSignature: themeSignature)
         if let cached = cellParseCache.object(forKey: key) {
             lock.lock()
             hitsCellParse += 1
@@ -187,8 +192,8 @@ public final class TableCellSizeCache {
         return nil
     }
 
-    func storeCellParse(contentHash: Int, isHeader: Bool, attributedString: NSAttributedString) {
-        let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader)
+    func storeCellParse(contentHash: Int, isHeader: Bool, themeSignature: Int, attributedString: NSAttributedString) {
+        let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader, themeSignature: themeSignature)
         cellParseCache.setObject(attributedString, forKey: key)
     }
 
