@@ -7,6 +7,108 @@ import os
 /// Extends MarkdownTextView to inherit attachment layout handling.
 open class MarkdownView: MarkdownTextView {
     private static let widthEpsilon: CGFloat = 0.5
+
+    public struct RenderPipelineStats {
+        public let markdownAssignments: Int
+        public let streamingSchedules: Int
+        public let throttledExecutes: Int
+        public let renderCalls: Int
+        public let renderSkips: Int
+        public let widthUnavailable: Int
+
+        public static let zero = RenderPipelineStats(
+            markdownAssignments: 0,
+            streamingSchedules: 0,
+            throttledExecutes: 0,
+            renderCalls: 0,
+            renderSkips: 0,
+            widthUnavailable: 0
+        )
+    }
+
+    private final class RenderPipelineStatsCollector {
+        private var stats = RenderPipelineStats.zero
+
+        func snapshot(isEnabled: Bool) -> RenderPipelineStats {
+            isEnabled ? stats : .zero
+        }
+
+        func reset() {
+            stats = .zero
+        }
+
+        func markMarkdownAssignment(isEnabled: Bool) {
+            guard isEnabled else { return }
+            stats = RenderPipelineStats(
+                markdownAssignments: stats.markdownAssignments &+ 1,
+                streamingSchedules: stats.streamingSchedules,
+                throttledExecutes: stats.throttledExecutes,
+                renderCalls: stats.renderCalls,
+                renderSkips: stats.renderSkips,
+                widthUnavailable: stats.widthUnavailable
+            )
+        }
+
+        func markStreamingSchedule(isEnabled: Bool) {
+            guard isEnabled else { return }
+            stats = RenderPipelineStats(
+                markdownAssignments: stats.markdownAssignments,
+                streamingSchedules: stats.streamingSchedules &+ 1,
+                throttledExecutes: stats.throttledExecutes,
+                renderCalls: stats.renderCalls,
+                renderSkips: stats.renderSkips,
+                widthUnavailable: stats.widthUnavailable
+            )
+        }
+
+        func markThrottledExecute(isEnabled: Bool) {
+            guard isEnabled else { return }
+            stats = RenderPipelineStats(
+                markdownAssignments: stats.markdownAssignments,
+                streamingSchedules: stats.streamingSchedules,
+                throttledExecutes: stats.throttledExecutes &+ 1,
+                renderCalls: stats.renderCalls,
+                renderSkips: stats.renderSkips,
+                widthUnavailable: stats.widthUnavailable
+            )
+        }
+
+        func markRenderCall(isEnabled: Bool) {
+            guard isEnabled else { return }
+            stats = RenderPipelineStats(
+                markdownAssignments: stats.markdownAssignments,
+                streamingSchedules: stats.streamingSchedules,
+                throttledExecutes: stats.throttledExecutes,
+                renderCalls: stats.renderCalls &+ 1,
+                renderSkips: stats.renderSkips,
+                widthUnavailable: stats.widthUnavailable
+            )
+        }
+
+        func markRenderSkip(isEnabled: Bool) {
+            guard isEnabled else { return }
+            stats = RenderPipelineStats(
+                markdownAssignments: stats.markdownAssignments,
+                streamingSchedules: stats.streamingSchedules,
+                throttledExecutes: stats.throttledExecutes,
+                renderCalls: stats.renderCalls,
+                renderSkips: stats.renderSkips &+ 1,
+                widthUnavailable: stats.widthUnavailable
+            )
+        }
+
+        func markWidthUnavailable(isEnabled: Bool) {
+            guard isEnabled else { return }
+            stats = RenderPipelineStats(
+                markdownAssignments: stats.markdownAssignments,
+                streamingSchedules: stats.streamingSchedules,
+                throttledExecutes: stats.throttledExecutes,
+                renderCalls: stats.renderCalls,
+                renderSkips: stats.renderSkips,
+                widthUnavailable: stats.widthUnavailable &+ 1
+            )
+        }
+    }
     
     // MARK: - Configuration
     
@@ -41,9 +143,12 @@ open class MarkdownView: MarkdownTextView {
     
     /// Throttle interval for streaming mode (default 100ms = 10 renders/sec)
     public var throttleInterval: TimeInterval = 0.1
+
+    public var isRenderPipelineStatsEnabled: Bool = false
     
     public var markdown: String = "" {
         didSet {
+            statsCollector.markMarkdownAssignment(isEnabled: isRenderPipelineStatsEnabled)
             if isStreaming {
                 // Streaming mode: throttle rendering
                 scheduleThrottledRender(newMarkdown: markdown)
@@ -84,6 +189,8 @@ open class MarkdownView: MarkdownTextView {
     // Streaming throttle state
     private var pendingMarkdown: String?
     private var throttleTimer: Timer?
+    private var throttleWindowDeadline: CFTimeInterval = 0
+    private let statsCollector = RenderPipelineStatsCollector()
     
     // Intrinsic size cache: avoids ensureLayout during UITableView batch updates for stable cells
     private var cachedIntrinsicSize: CGSize?
@@ -131,6 +238,7 @@ open class MarkdownView: MarkdownTextView {
         if width > 0 {
             render(with: width)
         } else {
+            statsCollector.markWidthUnavailable(isEnabled: isRenderPipelineStatsEnabled)
             // No width available, mark for later render in layoutSubviews
             setNeedsLayout()
         }
@@ -160,10 +268,12 @@ open class MarkdownView: MarkdownTextView {
     }
     
     private func render(with width: CGFloat) {
+        statsCollector.markRenderCall(isEnabled: isRenderPipelineStatsEnabled)
         // O5: Skip render if markdown content is identical to last render at same width
         if markdown == lastRenderedMarkdown,
            abs(width - lastRenderedWidth) <= Self.widthEpsilon,
            renderInputVersion == lastRenderedInputVersion {
+            statsCollector.markRenderSkip(isEnabled: isRenderPipelineStatsEnabled)
             return
         }
         lastRenderedWidth = width
@@ -314,24 +424,56 @@ open class MarkdownView: MarkdownTextView {
     // MARK: - Streaming Throttle
     
     private func scheduleThrottledRender(newMarkdown: String) {
-        // Save latest pending content
+        if pendingMarkdown == newMarkdown {
+            return
+        }
+
+        if isRenderInputEquivalentForCurrentWidth(newMarkdown) {
+            return
+        }
+
+        statsCollector.markStreamingSchedule(isEnabled: isRenderPipelineStatsEnabled)
         pendingMarkdown = newMarkdown
-        
-        // If timer already running, wait for it to trigger (don't create new one)
-        guard throttleTimer == nil else { return }
-        
-        // Leading edge: render immediately on first update, then throttle subsequent
-        executeThrottledRender()
-        
+
+        if throttleTimer != nil {
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        if now >= throttleWindowDeadline {
+            executeThrottledRender()
+            throttleWindowDeadline = CACurrentMediaTime() + throttleInterval
+            return
+        }
+
+        let delay = throttleWindowDeadline - now
+        if delay <= 0 {
+            executeThrottledRender()
+            throttleWindowDeadline = CACurrentMediaTime() + throttleInterval
+            return
+        }
+
         throttleTimer = Timer.scheduledTimer(
-            withTimeInterval: throttleInterval,
+            withTimeInterval: delay,
             repeats: false
         ) { [weak self] _ in
-            self?.executeThrottledRender()
+            guard let self else { return }
+            self.executeThrottledRender()
+            self.throttleWindowDeadline = CACurrentMediaTime() + self.throttleInterval
         }
+    }
+
+    private func isRenderInputEquivalentForCurrentWidth(_ markdown: String) -> Bool {
+        let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
+        guard width > 0 else { return false }
+
+        return markdown == lastRenderedMarkdown
+            && abs(width - lastRenderedWidth) <= Self.widthEpsilon
+            && renderInputVersion == lastRenderedInputVersion
     }
     
     private func executeThrottledRender() {
+        statsCollector.markThrottledExecute(isEnabled: isRenderPipelineStatsEnabled)
         guard pendingMarkdown != nil else {
             throttleTimer = nil
             return
@@ -352,6 +494,7 @@ open class MarkdownView: MarkdownTextView {
             // ICS is already cached in Phase 5, so parent can query height without layout.
             setNeedsLayout()
         } else {
+            statsCollector.markWidthUnavailable(isEnabled: isRenderPipelineStatsEnabled)
             setNeedsLayout()
         }
     }
@@ -359,6 +502,7 @@ open class MarkdownView: MarkdownTextView {
     private func finalizeStreamingRender() {
         throttleTimer?.invalidate()
         throttleTimer = nil
+        throttleWindowDeadline = 0
         
         if pendingMarkdown != nil {
             pendingMarkdown = nil
@@ -422,6 +566,14 @@ open class MarkdownView: MarkdownTextView {
         
         return textPrefixLen
     }
+
+    public var renderPipelineStats: RenderPipelineStats {
+        statsCollector.snapshot(isEnabled: isRenderPipelineStatsEnabled)
+    }
+
+    public func resetRenderPipelineStats() {
+        statsCollector.reset()
+    }
     
     /// Call this before reusing the view (e.g., in prepareForReuse)
     public override func cleanUp() {
@@ -436,6 +588,7 @@ open class MarkdownView: MarkdownTextView {
         throttleTimer?.invalidate()
         throttleTimer = nil
         pendingMarkdown = nil
+        throttleWindowDeadline = 0
         lastRenderWasStreaming = false
         
         tableSizeCache.clearAll()

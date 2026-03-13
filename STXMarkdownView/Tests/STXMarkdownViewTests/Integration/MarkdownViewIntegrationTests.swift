@@ -145,6 +145,70 @@ final class MarkdownViewIntegrationTests: XCTestCase {
         )
     }
 
+    func testRenderPipelineStats_disabledByDefault_returnsZero() {
+        sut.markdown = "Hello"
+        sut.layoutIfNeeded()
+
+        let stats = sut.renderPipelineStats
+        XCTAssertEqual(stats.markdownAssignments, 0)
+        XCTAssertEqual(stats.streamingSchedules, 0)
+        XCTAssertEqual(stats.throttledExecutes, 0)
+        XCTAssertEqual(stats.widthUnavailable, 0)
+        XCTAssertEqual(stats.renderCalls, 0)
+        XCTAssertEqual(stats.renderSkips, 0)
+    }
+
+    func testRenderPipelineStats_enabled_tracksAssignmentsAndSkips() {
+        sut.isRenderPipelineStatsEnabled = true
+        sut.resetRenderPipelineStats()
+
+        sut.markdown = "Hello"
+        sut.layoutIfNeeded()
+
+        sut.markdown = "Hello"
+        sut.layoutIfNeeded()
+
+        let stats = sut.renderPipelineStats
+        XCTAssertEqual(stats.markdownAssignments, 2)
+        XCTAssertEqual(stats.streamingSchedules, 0)
+        XCTAssertEqual(stats.throttledExecutes, 0)
+        XCTAssertEqual(stats.widthUnavailable, 0)
+        XCTAssertEqual(stats.renderCalls, 2)
+        XCTAssertEqual(stats.renderSkips, 1)
+    }
+
+    func testRenderPipelineStats_resetClearsAllCounters() {
+        sut.isRenderPipelineStatsEnabled = true
+        sut.markdown = "Hello"
+        sut.layoutIfNeeded()
+
+        sut.resetRenderPipelineStats()
+        let stats = sut.renderPipelineStats
+
+        XCTAssertEqual(stats.markdownAssignments, 0)
+        XCTAssertEqual(stats.streamingSchedules, 0)
+        XCTAssertEqual(stats.throttledExecutes, 0)
+        XCTAssertEqual(stats.renderCalls, 0)
+        XCTAssertEqual(stats.renderSkips, 0)
+        XCTAssertEqual(stats.widthUnavailable, 0)
+    }
+
+    func testStreamingDuplicateMarkdown_doesNotRescheduleRender() {
+        sut.isRenderPipelineStatsEnabled = true
+        sut.isStreaming = true
+        sut.throttleInterval = 0.05
+        sut.resetRenderPipelineStats()
+
+        sut.markdown = "Hello"
+        sut.markdown = "Hello"
+
+        RunLoop.main.run(until: Date().addingTimeInterval(0.06))
+
+        let stats = sut.renderPipelineStats
+        XCTAssertEqual(stats.markdownAssignments, 2)
+        XCTAssertEqual(stats.streamingSchedules, 1)
+    }
+
     // MARK: - findCommonPrefixLength Correctness (Wave 1)
 
     func testFindCommonPrefixLength_detectsDivergenceBetweenSamplePoints() {

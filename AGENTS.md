@@ -134,9 +134,12 @@ MarkdownView (UIView, public entry point)
 # Run unit tests
 ./scripts/run-tests.sh
 
-# Run snapshot tests (record mode: --record)
+# Run snapshot tests (verify mode — requires baselines to exist)
 ./scripts/run-snapshot-tests.sh
-./scripts/run-snapshot-tests.sh --record  # regenerate baselines
+
+# Run snapshot tests with recording (regenerate baselines)
+./scripts/run-snapshot-tests.sh --record            # app-level (MarkdownDemoSnapshotTests)
+./scripts/run-snapshot-tests.sh --record --library   # library-level (MarkdownViewSnapshotTests)
 
 # Build XCFramework (static + dynamic)
 ./scripts/build-xcframework.sh
@@ -157,6 +160,34 @@ open MarkdownDemo.xcodeproj
 - `TableCellSizeCache` has 4 independent caches (intrinsic/height/layout/cellParse) with LRU eviction
 - `ImageCache` uses CGImageSource downsampling to reduce memory; two-tier (memory + disk) with adaptive limits
 - CI runs on macOS 15 (PR tests) and macOS 14 + Xcode 15.4 (release builds)
+
+## SNAPSHOT TESTING
+
+Two test targets with snapshot tests:
+- **App-level** (`MarkdownDemoSnapshotTests`): full layout tests with UIGraphicsImageRenderer, run via `./scripts/run-snapshot-tests.sh`
+- **Library-level** (`MarkdownViewSnapshotTests`): SPM target tests using swift-snapshot-testing, run via `./scripts/run-snapshot-tests.sh --library`
+
+Both targets use the `SNAPSHOT_RECORDING` environment variable to control recording mode:
+- Code: `isRecording = ProcessInfo.processInfo.environment["SNAPSHOT_RECORDING"] == "1"`
+- **NEVER** hardcode `isRecording = true/false` in test source — always use the env var
+
+Recording baselines (MUST do when adding new snapshot tests):
+```bash
+./scripts/run-snapshot-tests.sh --record              # app-level baselines
+./scripts/run-snapshot-tests.sh --record --library     # library-level baselines
+```
+
+Verify mode (CI / normal runs):
+```bash
+./scripts/run-snapshot-tests.sh                        # app-level verify
+./scripts/run-snapshot-tests.sh --library              # library-level verify
+```
+
+Workflow for adding new snapshot tests:
+1. Write test methods
+2. Record baselines: `--record` (app) or `--record --library` (library)
+3. Verify: re-run without `--record` — all tests must pass
+4. Commit both test code AND generated baseline images under `__Snapshots__/`
 
 ## Learning rule
 

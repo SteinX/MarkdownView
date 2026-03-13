@@ -450,6 +450,44 @@ struct MarkdownParser: MarkupWalker {
         let padding: CGFloat = theme.quote.padding * 2 // Roughly padding left + padding right + borders
         
         let availableWidth = max(0, maxLayoutWidth - currentIndentationWidth)
+
+        var hasher = Hasher()
+        func hashQuoteNode(_ node: Markup) {
+            hasher.combine(ObjectIdentifier(type(of: node)))
+
+            if let text = node as? Text {
+                hasher.combine(text.string)
+            } else if let code = node as? InlineCode {
+                hasher.combine(code.code)
+            } else if let link = node as? Link {
+                hasher.combine(link.destination ?? "")
+                hasher.combine(link.title ?? "")
+            } else if let image = node as? Image {
+                hasher.combine(image.source ?? "")
+            }
+
+            for child in node.children {
+                hashQuoteNode(child)
+            }
+        }
+        hashQuoteNode(blockQuote)
+        let quoteSourceHash = hasher.finalize()
+
+        let contentKey = QuoteContentKey(
+            sourceHash: quoteSourceHash,
+            width: availableWidth,
+            isInsideQuote: isInsideQuote
+        )
+
+        if let pool = attachmentPool,
+           let (pooledView, exactMatch): (QuoteView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming),
+           exactMatch,
+           pooledView.frame.size.height > 0 {
+            let finalSize = CGSize(width: availableWidth, height: pooledView.frame.size.height)
+            pooledView.frame = CGRect(origin: .zero, size: finalSize)
+            insertAttachment(view: pooledView, size: finalSize, isBlock: true, contentKey: contentKey)
+            return
+        }
         
         let childTheme = theme.quoted
         var childParser = MarkdownParser(
@@ -469,13 +507,6 @@ struct MarkdownParser: MarkupWalker {
         
         let attributedText = childParser.attributedString
         let attachments = childParser.attachments
-
-        let contentKey = QuoteContentKey(
-            textHash: attributedText.string.hashValue,
-            attachmentsHash: attachmentsHash(attachments),
-            width: availableWidth,
-            isInsideQuote: isInsideQuote
-        )
         
         let view: QuoteView
         var isExactMatch = false

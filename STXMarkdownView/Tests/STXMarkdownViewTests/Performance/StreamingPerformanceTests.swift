@@ -530,6 +530,77 @@ CREATE INDEX idx_events_type_time ON events (event_type, created_at DESC);
 - [ ] Create runbooks for each `critical path`
 """
 
+private let kQuoteHeavyDocument = """
+# Incident Postmortem - Regional Auth Outage
+
+> ## Timeline Summary
+> 
+> At 09:12 UTC, users in two regions began seeing intermittent login failures.
+> 
+> > ### Detection Signals
+> > 
+> > - API gateway error rate climbed from 0.3% to 14.8% within 4 minutes.
+> > - Auth cache hit ratio dropped from 93% to 41%.
+> > - Token minting latency crossed 800ms at P99.
+> > 
+> > ```swift
+> > struct AuthHealth {
+> >     let p50: Double
+> >     let p95: Double
+> >     let p99: Double
+> >     let errorRate: Double
+> > }
+> > 
+> > func degraded(_ h: AuthHealth) -> Bool {
+> >     h.errorRate > 0.05 || h.p99 > 400
+> > }
+> > ```
+> > 
+> > | Metric | Baseline | During Incident | Delta |
+> > |--------|----------|-----------------|-------|
+> > | Error Rate | 0.3% | 14.8% | +14.5% |
+> > | P99 Latency | 88ms | 842ms | +754ms |
+> > | Cache Hit | 93% | 41% | -52% |
+> > 
+> > > #### Root Cause Candidate A
+> > > 
+> > > A malformed issuer list propagated to one shard group and triggered
+> > > repeated fallback token validation.
+> > > 
+> > > ```bash
+> > > kubectl -n auth get pods -l app=issuer-sync
+> > > kubectl -n auth logs deploy/issuer-sync --tail=200
+> > > ```
+> > > 
+> > > > ##### Containment Step
+> > > > 
+> > > > Roll back issuer bundle to the previous signed revision and force reload.
+
+> ## Action Items
+> 
+> > 1. Add checksum gate before distributing issuer bundles.
+> > 2. Add shard-level circuit breaker around fallback validation.
+> > 3. Add SLO alert for cache hit ratio below 70% for 3 minutes.
+> > 
+> > | Owner | Item | Priority | ETA |
+> > |-------|------|----------|-----|
+> > | Security | checksum gate | P0 | 2 days |
+> > | Platform | circuit breaker | P0 | 3 days |
+> > | SRE | cache hit alert | P1 | 1 day |
+> > 
+> > ```json
+> > {
+> >   "incident": "auth-regional-outage",
+> >   "status": "mitigated",
+> >   "next_review": "2026-03-20T10:00:00Z",
+> >   "action_items": 3
+> > }
+> > ```
+
+Conclusion: apply staged rollout with quote-rich diagnostics enabled and verify
+all remediation checkpoints before enabling full traffic.
+"""
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MARK: - StreamingPerformanceTests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -670,6 +741,19 @@ final class StreamingPerformanceTests: XCTestCase {
         }
     }
 
+    func testStreamingFrameTime_QuoteHeavyDocument() {
+        let chunks = makeStreamingChunks(from: kQuoteHeavyDocument, chunkSize: 28)
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()], options: options) {
+            for chunk in chunks {
+                sut.markdown = chunk
+                sut.layoutIfNeeded()
+            }
+            sut.markdown = ""
+        }
+    }
+
     /// Simulates a long AI conversation: kFullComplexDocument repeated 3×.
     /// Tests pool eviction under sustained streaming with high attachment count.
     func testStreamingFrameTime_ExtendedSession() {
@@ -739,6 +823,12 @@ final class StreamingPerformanceTests: XCTestCase {
         attachReport(report, name: "FrameTimingDistribution_FullComplexDocument")
     }
 
+    func testFrameTimingDistribution_QuoteHeavyDocument() {
+        let chunks = makeStreamingChunks(from: kQuoteHeavyDocument, chunkSize: 28)
+        let report = collectFrameTimingReport(chunks: chunks, label: "QuoteHeavyDocument")
+        attachReport(report, name: "FrameTimingDistribution_QuoteHeavyDocument")
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // MARK: Machine-Readable Performance Summary (Wave 0)
     // ─────────────────────────────────────────────────────────────────────────
@@ -753,6 +843,7 @@ final class StreamingPerformanceTests: XCTestCase {
             ("DeepNest", kDeepNestDocument, 30),
             ("MixedContent", kMixedContentDocument, 30),
             ("FullComplex", kFullComplexDocument, 30),
+            ("QuoteHeavy", kQuoteHeavyDocument, 28),
         ]
 
         var results: [DocumentTimingResult] = []
@@ -789,6 +880,7 @@ final class StreamingPerformanceTests: XCTestCase {
             ("DeepNest", kDeepNestDocument, 30),
             ("MixedContent", kMixedContentDocument, 30),
             ("FullComplex", kFullComplexDocument, 30),
+            ("QuoteHeavy", kQuoteHeavyDocument, 28),
         ]
 
         var results: [DocumentTimingResult] = []
@@ -801,6 +893,46 @@ final class StreamingPerformanceTests: XCTestCase {
         let comparison = compareWithBaseline(results, baselinePath: baselinePath)
         print(comparison)
         attachReport(comparison, name: "PerformanceComparison")
+    }
+
+    func testStreamingObservabilityToggleComparison_FullComplexDocument() {
+        let chunks = makeStreamingChunks(from: kFullComplexDocument, chunkSize: 30)
+
+        let disabledRun = collectFrameTimingData(chunks: chunks, statsEnabled: false)
+        let enabledRun = collectFrameTimingData(chunks: chunks, statsEnabled: true)
+
+        let disabledResult = makeTimingResult(label: "StatsDisabled", frameTimes: disabledRun.frameTimes)
+        let enabledResult = makeTimingResult(label: "StatsEnabled", frameTimes: enabledRun.frameTimes)
+
+        let avgDeltaPct = disabledResult.avg_ms > 0
+            ? ((enabledResult.avg_ms - disabledResult.avg_ms) / disabledResult.avg_ms) * 100
+            : 0
+        let p99DeltaPct = disabledResult.p99_ms > 0
+            ? ((enabledResult.p99_ms - disabledResult.p99_ms) / disabledResult.p99_ms) * 100
+            : 0
+
+        let report = buildObservabilityToggleReport(
+            disabledResult: disabledResult,
+            enabledResult: enabledResult,
+            disabledStats: disabledRun.stats,
+            enabledStats: enabledRun.stats,
+            avgDeltaPct: avgDeltaPct,
+            p99DeltaPct: p99DeltaPct
+        )
+
+        print(report)
+        attachReport(report, name: "StreamingObservabilityToggleComparison_FullComplex")
+
+        XCTAssertEqual(disabledRun.stats.markdownAssignments, 0)
+        XCTAssertEqual(disabledRun.stats.streamingSchedules, 0)
+        XCTAssertEqual(disabledRun.stats.throttledExecutes, 0)
+        XCTAssertEqual(disabledRun.stats.renderCalls, 0)
+        XCTAssertEqual(disabledRun.stats.renderSkips, 0)
+
+        XCTAssertGreaterThan(enabledRun.stats.markdownAssignments, 0)
+        XCTAssertGreaterThan(enabledRun.stats.streamingSchedules, 0)
+        XCTAssertGreaterThan(enabledRun.stats.throttledExecutes, 0)
+        XCTAssertGreaterThan(enabledRun.stats.renderCalls, 0)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1630,6 +1762,11 @@ private extension StreamingPerformanceTests {
         let total: Double
     }
 
+    struct ObservabilityToggleRun {
+        let frameTimes: [Double]
+        let stats: MarkdownView.RenderPipelineStats
+    }
+
     func buildChatScenarioReport(
         withCompleted: [ChatTickProfile],
         withoutCompleted: [ChatTickProfile]
@@ -1710,5 +1847,63 @@ private extension StreamingPerformanceTests {
 
         lines.append("└──────────────────────────────────────────────────────────")
         return lines.joined(separator: "\n")
+    }
+
+    func collectFrameTimingData(chunks: [String], statsEnabled: Bool) -> ObservabilityToggleRun {
+        let originalIsStreaming = sut.isStreaming
+        let originalThrottleInterval = sut.throttleInterval
+
+        sut.isStreaming = true
+        sut.throttleInterval = 0.001
+        sut.isRenderPipelineStatsEnabled = statsEnabled
+        sut.resetRenderPipelineStats()
+
+        var frameTimes: [Double] = []
+        frameTimes.reserveCapacity(chunks.count)
+        for chunk in chunks {
+            let t0 = CACurrentMediaTime()
+            sut.markdown = chunk
+            RunLoop.main.run(until: Date().addingTimeInterval(sut.throttleInterval * 2))
+            sut.layoutIfNeeded()
+            frameTimes.append(CACurrentMediaTime() - t0)
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(sut.throttleInterval * 2))
+
+        let stats = sut.renderPipelineStats
+        sut.markdown = ""
+        sut.isStreaming = originalIsStreaming
+        sut.throttleInterval = originalThrottleInterval
+        sut.isRenderPipelineStatsEnabled = false
+        sut.resetRenderPipelineStats()
+
+        return ObservabilityToggleRun(frameTimes: frameTimes, stats: stats)
+    }
+
+    func buildObservabilityToggleReport(
+        disabledResult: DocumentTimingResult,
+        enabledResult: DocumentTimingResult,
+        disabledStats: MarkdownView.RenderPipelineStats,
+        enabledStats: MarkdownView.RenderPipelineStats,
+        avgDeltaPct: Double,
+        p99DeltaPct: Double
+    ) -> String {
+        let report = """
+        ┌──────────────────────────────────────────────────────────
+        │ STREAMING OBSERVABILITY TOGGLE COMPARISON (FullComplex)
+        ├──────────────────────────────────────────────────────────
+        │ Stats Disabled: avg=\(String(format: "%.3f", disabledResult.avg_ms))ms p99=\(String(format: "%.3f", disabledResult.p99_ms))ms frames=\(disabledResult.frames)
+        │ Stats Enabled : avg=\(String(format: "%.3f", enabledResult.avg_ms))ms p99=\(String(format: "%.3f", enabledResult.p99_ms))ms frames=\(enabledResult.frames)
+        │ Delta (enabled - disabled): avg=\(String(format: "%+.2f", avgDeltaPct))% p99=\(String(format: "%+.2f", p99DeltaPct))%
+        ├──────────────────────────────────────────────────────────
+        │ Collector snapshot when disabled
+        │ assignments=\(disabledStats.markdownAssignments) schedules=\(disabledStats.streamingSchedules) executes=\(disabledStats.throttledExecutes)
+        │ renderCalls=\(disabledStats.renderCalls) renderSkips=\(disabledStats.renderSkips) widthUnavailable=\(disabledStats.widthUnavailable)
+        ├──────────────────────────────────────────────────────────
+        │ Collector snapshot when enabled
+        │ assignments=\(enabledStats.markdownAssignments) schedules=\(enabledStats.streamingSchedules) executes=\(enabledStats.throttledExecutes)
+        │ renderCalls=\(enabledStats.renderCalls) renderSkips=\(enabledStats.renderSkips) widthUnavailable=\(enabledStats.widthUnavailable)
+        └──────────────────────────────────────────────────────────
+        """
+        return report
     }
 }
