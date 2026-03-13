@@ -1,0 +1,119 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g. 1.2.0)"
+        required: true
+        type: string
+      release_notes:
+        description: "Release notes (Markdown supported)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run unit tests
+        run: ./scripts/run-tests.sh
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: build/reports/*.xcresult
+          retention-days: 7
+
+  release:
+    name: Build & Release
+    needs: test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must be in semver format (e.g. 1.2.0)"
+            exit 1
+          fi
+
+      - name: Check tag does not exist
+        run: |
+          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ inputs.version }} already exists"
+            exit 1
+          fi
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Build XCFramework
+        run: |
+          chmod +x scripts/build-xcframework.sh
+          ./scripts/build-xcframework.sh --static
+
+      - name: Package XCFramework
+        run: |
+          cd Frameworks
+          zip -r STXMarkdownView.xcframework.zip STXMarkdownView.xcframework
+
+      - name: Update podspec version
+        run: |
+          sed -i '' "s/s\.version          = '.*'/s.version          = '${{ inputs.version }}'/" STXMarkdownView.podspec
+
+      - name: Commit artifacts to default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p /tmp/release-sync
+          cp -R Frameworks/STXMarkdownView.xcframework /tmp/release-sync/
+          cp STXMarkdownView.podspec /tmp/release-sync/
+
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout "$DEFAULT_BRANCH"
+
+          rm -rf Frameworks/STXMarkdownView.xcframework
+          cp -R /tmp/release-sync/STXMarkdownView.xcframework Frameworks/
+          cp /tmp/release-sync/STXMarkdownView.podspec STXMarkdownView.podspec
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Frameworks/STXMarkdownView.xcframework STXMarkdownView.podspec
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update xcframework and podspec for v${{ inputs.version }}"
+            git push origin HEAD:"$DEFAULT_BRANCH"
+          fi
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            Frameworks/STXMarkdownView.xcframework.zip \
+            --title "v${{ inputs.version }}" \
+            --notes "${{ inputs.release_notes }}" \
+            --target "${{ github.event.repository.default_branch }}"
