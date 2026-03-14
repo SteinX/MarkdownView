@@ -104,6 +104,7 @@ MarkdownView (UIView, public entry point)
   - Test content MUST be a sufficiently long and complex Markdown document covering all supported elements — especially nested/complex structures (tables within quotes, multi-language code blocks, deeply nested lists, images, horizontal rules, etc.)
   - To ensure stable and reproducible results, before/after benchmark runs MUST be performed on the **same device** in the same conditions
   - All optimization changes MUST pass existing functional tests with **zero regressions** — performance gains that break correctness are not acceptable
+- **Agent asset portability** - Store project-level agent skills/workflows under `.agents/` (for example `.agents/skills/...`) instead of tool-specific directories such as `.opencode/`.
 
 ## ANTI-PATTERNS
 
@@ -191,7 +192,7 @@ Workflow for adding new snapshot tests:
 
 ## Learning rule
 
-When discovering a reusable insight, propose an update to learning.md.
+When discovering a reusable insight, propose an update to `AGENTS.md` or a portable project-level skill under `.agents/skills/`.
 
 Examples:
 
