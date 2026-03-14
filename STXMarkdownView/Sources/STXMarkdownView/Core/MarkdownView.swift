@@ -388,8 +388,13 @@ open class MarkdownView: MarkdownTextView {
             layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
         }
         layoutManager.ensureLayout(for: textContainer)
+        markAttachmentLayoutEnsured(forWidth: width)
         
         attachmentViews = finalAttachments
+        if let changeStart = incrementalChangeStart {
+            setNeedsAttachmentLayout(fromCharacterIndex: changeStart)
+            markAttachmentLayoutEnsured(forWidth: width)
+        }
         lastRenderedResult = RenderedMarkdown(attributedString: result.attributedString, attachments: finalAttachments)
         _attachmentPool.logStats(context: "after render")
         

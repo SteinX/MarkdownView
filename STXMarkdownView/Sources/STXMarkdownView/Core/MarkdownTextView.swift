@@ -6,10 +6,13 @@ open class MarkdownTextView: UITextView {
     
     private(set) var needsAttachmentLayout = false
     private var lastAttachmentLayoutWidth: CGFloat = -1
+    private var lastEnsuredLayoutWidth: CGFloat = -1
+    private var minAttachmentLayoutCharIndex: Int?
     
     public var attachmentViews: [Int: AttachmentInfo] = [:] {
         didSet {
             needsAttachmentLayout = true
+            minAttachmentLayoutCharIndex = nil
             let oldViewIDs = Set(oldValue.values.map { ObjectIdentifier($0.view) })
             let newViewIDs = Set(attachmentViews.values.map { ObjectIdentifier($0.view) })
             for info in oldValue.values where !newViewIDs.contains(ObjectIdentifier(info.view)) {
@@ -26,6 +29,23 @@ open class MarkdownTextView: UITextView {
     /// Called by subclasses when textStorage content changes without attachmentViews being reassigned.
     func setNeedsAttachmentLayout() {
         needsAttachmentLayout = true
+        lastEnsuredLayoutWidth = -1
+        minAttachmentLayoutCharIndex = nil
+    }
+
+    func setNeedsAttachmentLayout(fromCharacterIndex index: Int) {
+        needsAttachmentLayout = true
+        lastEnsuredLayoutWidth = -1
+        let clamped = max(0, index)
+        if let existing = minAttachmentLayoutCharIndex {
+            minAttachmentLayoutCharIndex = min(existing, clamped)
+        } else {
+            minAttachmentLayoutCharIndex = clamped
+        }
+    }
+
+    func markAttachmentLayoutEnsured(forWidth width: CGFloat) {
+        lastEnsuredLayoutWidth = width
     }
 
     
@@ -103,15 +123,40 @@ open class MarkdownTextView: UITextView {
         guard needsAttachmentLayout || widthChanged else {
             return
         }
-        
-        layoutManager.ensureLayout(for: textContainer)
-        
+
         let attachmentCount = attachmentViews.count
+        guard attachmentCount > 0 else {
+            needsAttachmentLayout = false
+            minAttachmentLayoutCharIndex = nil
+            lastAttachmentLayoutWidth = currentWidth
+            return
+        }
+        
+        let layoutAlreadyEnsured = abs(currentWidth - lastEnsuredLayoutWidth) <= CGFloat.ulpOfOne
+        if !layoutAlreadyEnsured {
+            layoutManager.ensureLayout(for: textContainer)
+            lastEnsuredLayoutWidth = currentWidth
+        }
+
         if attachmentCount > 0 {
             MarkdownLogger.verbose(.layout, "layoutSubviews positioning \(attachmentCount) attachments")
         }
-        
+
+        let minCharIndexToLayout = widthChanged ? nil : minAttachmentLayoutCharIndex
+        if let minCharIndexToLayout {
+            let hasAffectedAttachment = attachmentViews.keys.contains { $0 >= minCharIndexToLayout }
+            if !hasAffectedAttachment {
+                needsAttachmentLayout = false
+                minAttachmentLayoutCharIndex = nil
+                lastAttachmentLayoutWidth = currentWidth
+                return
+            }
+        }
+
         for (charIndex, info) in attachmentViews {
+            if let minCharIndexToLayout, charIndex < minCharIndexToLayout {
+                continue
+            }
             let view = info.view
             guard charIndex < (attributedText?.length ?? 0) else { continue }
             
@@ -130,14 +175,11 @@ open class MarkdownTextView: UITextView {
             let finalRect = rect.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
             
             if view.frame != finalRect {
-                // O8: Skip setNeedsLayout for position-only moves. UIKit automatically
-                // triggers layoutSubviews when bounds.size changes via frame assignment.
-                // During streaming, existing attachments shift down (same size, new origin)
-                // — forcing internal re-layout of tables/code blocks is unnecessary and
-                // is the primary source of ~100ms P99 layout overhead.
-                let sizeChanged = abs(view.bounds.width - finalRect.width) > 0.5
-                    || abs(view.bounds.height - finalRect.height) > 0.5
+                let sizeChanged = abs(view.frame.width - finalRect.width) > 0.5
+                    || abs(view.frame.height - finalRect.height) > 0.5
+
                 view.frame = finalRect
+
                 if sizeChanged {
                     view.setNeedsLayout()
                 }
@@ -145,6 +187,7 @@ open class MarkdownTextView: UITextView {
         }
         
         needsAttachmentLayout = false
+        minAttachmentLayoutCharIndex = nil
         lastAttachmentLayoutWidth = currentWidth
     }
     
@@ -156,6 +199,7 @@ open class MarkdownTextView: UITextView {
         attachmentViews.removeAll()
         attributedText = nil
         lastAttachmentLayoutWidth = -1
+        lastEnsuredLayoutWidth = -1
     }
 
 }
