@@ -15,6 +15,13 @@ open class MarkdownView: MarkdownTextView {
         public let renderCalls: Int
         public let renderSkips: Int
         public let widthUnavailable: Int
+        public let attachmentCreated: Int
+        public let attachmentPreserved: Int
+        public let attachmentRecycled: Int
+        public let incrementalUpdates: Int
+        public let fullInvalidations: Int
+        public let layoutSubviewsCalls: Int
+        public let tableFullLayoutPasses: Int
 
         public static let zero = RenderPipelineStats(
             markdownAssignments: 0,
@@ -22,91 +29,122 @@ open class MarkdownView: MarkdownTextView {
             throttledExecutes: 0,
             renderCalls: 0,
             renderSkips: 0,
-            widthUnavailable: 0
+            widthUnavailable: 0,
+            attachmentCreated: 0,
+            attachmentPreserved: 0,
+            attachmentRecycled: 0,
+            incrementalUpdates: 0,
+            fullInvalidations: 0,
+            layoutSubviewsCalls: 0,
+            tableFullLayoutPasses: 0
         )
     }
 
     private final class RenderPipelineStatsCollector {
-        private var stats = RenderPipelineStats.zero
+        private var _markdownAssignments = 0
+        private var _streamingSchedules = 0
+        private var _throttledExecutes = 0
+        private var _renderCalls = 0
+        private var _renderSkips = 0
+        private var _widthUnavailable = 0
+        private var _attachmentCreated = 0
+        private var _attachmentPreserved = 0
+        private var _attachmentRecycled = 0
+        private var _incrementalUpdates = 0
+        private var _fullInvalidations = 0
+        private var _layoutSubviewsCalls = 0
+        private var _tableFullLayoutPasses = 0
 
         func snapshot(isEnabled: Bool) -> RenderPipelineStats {
-            isEnabled ? stats : .zero
+            guard isEnabled else { return .zero }
+            return RenderPipelineStats(
+                markdownAssignments: _markdownAssignments,
+                streamingSchedules: _streamingSchedules,
+                throttledExecutes: _throttledExecutes,
+                renderCalls: _renderCalls,
+                renderSkips: _renderSkips,
+                widthUnavailable: _widthUnavailable,
+                attachmentCreated: _attachmentCreated,
+                attachmentPreserved: _attachmentPreserved,
+                attachmentRecycled: _attachmentRecycled,
+                incrementalUpdates: _incrementalUpdates,
+                fullInvalidations: _fullInvalidations,
+                layoutSubviewsCalls: _layoutSubviewsCalls,
+                tableFullLayoutPasses: _tableFullLayoutPasses
+            )
         }
 
         func reset() {
-            stats = .zero
+            _markdownAssignments = 0
+            _streamingSchedules = 0
+            _throttledExecutes = 0
+            _renderCalls = 0
+            _renderSkips = 0
+            _widthUnavailable = 0
+            _attachmentCreated = 0
+            _attachmentPreserved = 0
+            _attachmentRecycled = 0
+            _incrementalUpdates = 0
+            _fullInvalidations = 0
+            _layoutSubviewsCalls = 0
+            _tableFullLayoutPasses = 0
         }
 
         func markMarkdownAssignment(isEnabled: Bool) {
             guard isEnabled else { return }
-            stats = RenderPipelineStats(
-                markdownAssignments: stats.markdownAssignments &+ 1,
-                streamingSchedules: stats.streamingSchedules,
-                throttledExecutes: stats.throttledExecutes,
-                renderCalls: stats.renderCalls,
-                renderSkips: stats.renderSkips,
-                widthUnavailable: stats.widthUnavailable
-            )
+            _markdownAssignments &+= 1
         }
 
         func markStreamingSchedule(isEnabled: Bool) {
             guard isEnabled else { return }
-            stats = RenderPipelineStats(
-                markdownAssignments: stats.markdownAssignments,
-                streamingSchedules: stats.streamingSchedules &+ 1,
-                throttledExecutes: stats.throttledExecutes,
-                renderCalls: stats.renderCalls,
-                renderSkips: stats.renderSkips,
-                widthUnavailable: stats.widthUnavailable
-            )
+            _streamingSchedules &+= 1
         }
 
         func markThrottledExecute(isEnabled: Bool) {
             guard isEnabled else { return }
-            stats = RenderPipelineStats(
-                markdownAssignments: stats.markdownAssignments,
-                streamingSchedules: stats.streamingSchedules,
-                throttledExecutes: stats.throttledExecutes &+ 1,
-                renderCalls: stats.renderCalls,
-                renderSkips: stats.renderSkips,
-                widthUnavailable: stats.widthUnavailable
-            )
+            _throttledExecutes &+= 1
         }
 
         func markRenderCall(isEnabled: Bool) {
             guard isEnabled else { return }
-            stats = RenderPipelineStats(
-                markdownAssignments: stats.markdownAssignments,
-                streamingSchedules: stats.streamingSchedules,
-                throttledExecutes: stats.throttledExecutes,
-                renderCalls: stats.renderCalls &+ 1,
-                renderSkips: stats.renderSkips,
-                widthUnavailable: stats.widthUnavailable
-            )
+            _renderCalls &+= 1
         }
 
         func markRenderSkip(isEnabled: Bool) {
             guard isEnabled else { return }
-            stats = RenderPipelineStats(
-                markdownAssignments: stats.markdownAssignments,
-                streamingSchedules: stats.streamingSchedules,
-                throttledExecutes: stats.throttledExecutes,
-                renderCalls: stats.renderCalls,
-                renderSkips: stats.renderSkips &+ 1,
-                widthUnavailable: stats.widthUnavailable
-            )
+            _renderSkips &+= 1
         }
 
         func markWidthUnavailable(isEnabled: Bool) {
             guard isEnabled else { return }
-            stats = RenderPipelineStats(
-                markdownAssignments: stats.markdownAssignments,
-                streamingSchedules: stats.streamingSchedules,
-                throttledExecutes: stats.throttledExecutes,
-                renderCalls: stats.renderCalls,
-                renderSkips: stats.renderSkips,
-                widthUnavailable: stats.widthUnavailable &+ 1
-            )
+            _widthUnavailable &+= 1
+        }
+
+        func markAttachmentStats(isEnabled: Bool, created: Int, preserved: Int, recycled: Int) {
+            guard isEnabled else { return }
+            _attachmentCreated &+= created
+            _attachmentPreserved &+= preserved
+            _attachmentRecycled &+= recycled
+        }
+
+        func markIncrementalUpdate(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _incrementalUpdates &+= 1
+        }
+
+        func markFullInvalidation(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _fullInvalidations &+= 1
+        }
+
+        func markLayoutSubviewsCall(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _layoutSubviewsCalls &+= 1
+        }
+
+        func markTableLayoutPasses(isEnabled: Bool, count: Int) {
+            guard isEnabled else { return }
+            _tableFullLayoutPasses &+= count
         }
     }
     
@@ -245,6 +283,7 @@ open class MarkdownView: MarkdownTextView {
     }
     
     open override func layoutSubviews() {
+        statsCollector.markLayoutSubviewsCall(isEnabled: isRenderPipelineStatsEnabled)
         applyPreferredTextContainerWidth()
 
         // Check if we need to render (e.g., width wasn't available before)
@@ -312,6 +351,8 @@ open class MarkdownView: MarkdownTextView {
         let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width, tableSizeCache: tableSizeCache)
         
         // Phase 1: Parse
+        MarkdownTableView._computeLayoutCallCount = 0
+        let parseSignpostState = Self.renderSignposter.beginInterval("Parse", id: Self.renderSignposter.makeSignpostID())
         let result: RenderedMarkdown
         if let document = cachedDocument {
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
@@ -321,7 +362,11 @@ open class MarkdownView: MarkdownTextView {
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         }
         
+        Self.renderSignposter.endInterval("Parse", parseSignpostState)
+        let tablePassesDuringParse = MarkdownTableView._computeLayoutCallCount
+        
         // Phase 3: O6 Diff
+        let reconcileSignpostState = Self.renderSignposter.beginInterval("Reconcile", id: Self.renderSignposter.makeSignpostID())
         var finalAttachments = result.attachments
         var oldByKey: [AnyHashable: [(position: Int, info: AttachmentInfo)]] = [:]
         for (pos, info) in oldAttachments {
@@ -342,14 +387,26 @@ open class MarkdownView: MarkdownTextView {
         }
         
         let maxOldPos = oldAttachments.keys.max() ?? -1
+        var recycledCount = 0
         for entries in oldByKey.values {
             for entry in entries {
                 let isTrailing = recycleToStreamingPool && entry.position == maxOldPos
                 _attachmentPool.recycle(entry.info.view, anyKey: entry.info.contentKey, isStreaming: isTrailing)
+                recycledCount += 1
             }
         }
+        Self.renderSignposter.endInterval("Reconcile", reconcileSignpostState)
+        let preservedCount = preservedOldViewIDs.count
+        statsCollector.markAttachmentStats(
+            isEnabled: isRenderPipelineStatsEnabled,
+            created: result.attachments.count - preservedCount,
+            preserved: preservedCount,
+            recycled: recycledCount
+        )
+        statsCollector.markTableLayoutPasses(isEnabled: isRenderPipelineStatsEnabled, count: tablePassesDuringParse)
         
         // Phase 4: O7 Incremental TextStorage update
+        let textStorageSignpostState = Self.renderSignposter.beginInterval("TextStorage", id: Self.renderSignposter.makeSignpostID())
         var incrementalChangeStart: Int?
         if let previous = previousRenderedString {
             let newString = result.attributedString
@@ -378,13 +435,17 @@ open class MarkdownView: MarkdownTextView {
         previousRenderedString = result.attributedString
         lastRenderedMarkdown = markdown
         lastRenderedInputVersion = renderInputVersion
+        Self.renderSignposter.endInterval("TextStorage", textStorageSignpostState)
         
         // Phase 5: Layout + intrinsic size computation + attachment assignment
+        let layoutSignpostState = Self.renderSignposter.beginInterval("Layout", id: Self.renderSignposter.makeSignpostID())
         
         if let changeStart = incrementalChangeStart {
+            statsCollector.markIncrementalUpdate(isEnabled: isRenderPipelineStatsEnabled)
             let changedRange = NSRange(location: changeStart, length: textStorage.length - changeStart)
             layoutManager.invalidateLayout(forCharacterRange: changedRange, actualCharacterRange: nil)
         } else {
+            statsCollector.markFullInvalidation(isEnabled: isRenderPipelineStatsEnabled)
             layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
         }
         layoutManager.ensureLayout(for: textContainer)
@@ -400,6 +461,7 @@ open class MarkdownView: MarkdownTextView {
         
         let maxPoolRetention = max(finalAttachments.count * 2, 10)
         _attachmentPool.trimToSize(maxPoolRetention)
+        Self.renderSignposter.endInterval("Layout", layoutSignpostState)
         
         let usedSize = layoutManager.usedRect(for: textContainer).size
         let insets = textContainerInset

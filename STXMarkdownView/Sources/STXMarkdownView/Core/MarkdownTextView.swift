@@ -1,8 +1,10 @@
 import UIKit
+import os
 
 /// A UITextView subclass that handles positioning of custom attachment views.
 /// Used by MarkdownView, QuoteView, and MarkdownTableView for consistent attachment layout.
 open class MarkdownTextView: UITextView {
+    private static let layoutSignposter = OSSignposter(subsystem: "com.stx.markdown", category: "Layout")
     
     private(set) var needsAttachmentLayout = false
     private var lastAttachmentLayoutWidth: CGFloat = -1
@@ -153,6 +155,7 @@ open class MarkdownTextView: UITextView {
             }
         }
 
+        let attachmentLayoutSignpostState = Self.layoutSignposter.beginInterval("AttachmentLayout", id: Self.layoutSignposter.makeSignpostID())
         for (charIndex, info) in attachmentViews {
             if let minCharIndexToLayout, charIndex < minCharIndexToLayout {
                 continue
@@ -185,6 +188,7 @@ open class MarkdownTextView: UITextView {
                 }
             }
         }
+        Self.layoutSignposter.endInterval("AttachmentLayout", attachmentLayoutSignpostState)
         
         needsAttachmentLayout = false
         minAttachmentLayoutCharIndex = nil

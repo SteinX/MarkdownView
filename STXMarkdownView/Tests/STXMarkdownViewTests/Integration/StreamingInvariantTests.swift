@@ -188,7 +188,7 @@ final class StreamingInvariantTests: XCTestCase {
         renderNonStreaming(on: sut, markdown: markdown)
 
         let first = try XCTUnwrap(sortedAttachmentInfos(from: sut).map(\.1).first { $0.view is CodeBlockView })
-        let firstSize = first.view.intrinsicContentSize
+        let firstContentSize = sut.intrinsicContentSize
         let firstKey = try XCTUnwrap(first.contentKey.base as? CodeBlockContentKey)
 
         sut.preferredMaxLayoutWidth = 200
@@ -196,11 +196,11 @@ final class StreamingInvariantTests: XCTestCase {
         renderNonStreaming(on: sut, markdown: markdown)
 
         let second = try XCTUnwrap(sortedAttachmentInfos(from: sut).map(\.1).first { $0.view is CodeBlockView })
-        let secondSize = second.view.intrinsicContentSize
+        let secondContentSize = sut.intrinsicContentSize
         let secondKey = try XCTUnwrap(second.contentKey.base as? CodeBlockContentKey)
 
         XCTAssertNotEqual(firstKey.width, secondKey.width)
-        XCTAssertTrue(sizeDiffers(firstSize, secondSize))
+        XCTAssertTrue(sizeDiffers(firstContentSize, secondContentSize))
     }
 
     func testStreamingTableRowIncrementalSafety_rowCountAndAttachmentCountAcrossTicks() throws {

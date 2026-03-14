@@ -1,4 +1,5 @@
 import UIKit
+import os
 
 // MARK: - Table View
 
@@ -59,6 +60,9 @@ public struct MarkdownTableLayoutResult {
 }
 
 public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, Reusable {
+    private static let tableSignposter = OSSignposter(subsystem: "com.stx.markdown", category: "Table")
+    static var _computeLayoutCallCount = 0
+
     // Data now includes Attachments
     private var headers: [(NSAttributedString, [Int: AttachmentInfo])]
     private var rows: [[(NSAttributedString, [Int: AttachmentInfo])]]
@@ -250,6 +254,9 @@ public class MarkdownTableView: UIView, UICollectionViewDataSource, UICollection
     // MARK: - Layout Calculation (Static & Internal)
     
     public static func computeLayout(headers: [NSAttributedString], rows: [[NSAttributedString]], theme: MarkdownTheme, maxWidth: CGFloat, cache: TableCellSizeCache? = nil) -> MarkdownTableLayoutResult {
+        _computeLayoutCallCount += 1
+        let signpostState = tableSignposter.beginInterval("ComputeLayout", id: tableSignposter.makeSignpostID())
+        defer { tableSignposter.endInterval("ComputeLayout", signpostState) }
         let start = CFAbsoluteTimeGetCurrent()
         let result = MarkdownLogger.measure(.table, "calculateLayout") {
             calculateLayout(headers: headers, rows: rows, theme: theme, maxWidth: maxWidth, cache: cache)
