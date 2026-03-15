@@ -110,6 +110,7 @@ EOF
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
     CODE_SIGNING_ALLOWED=NO \
     MACH_O_TYPE="$mach_o_type" \
+    OTHER_SWIFT_FLAGS="-no-verify-emitted-module-interface" \
     2>&1 | xcbeautify 2>/dev/null || cat
   
   log_info "Archiving for iOS Simulator..."
@@ -122,6 +123,7 @@ EOF
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
     CODE_SIGNING_ALLOWED=NO \
     MACH_O_TYPE="$mach_o_type" \
+    OTHER_SWIFT_FLAGS="-no-verify-emitted-module-interface" \
     2>&1 | xcbeautify 2>/dev/null || cat
   
   cd "$ROOT_DIR"
