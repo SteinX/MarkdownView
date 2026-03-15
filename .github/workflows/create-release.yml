@@ -80,6 +80,17 @@ jobs:
         run: |
           sed -i '' "s/s\.version          = '.*'/s.version          = '${{ inputs.version }}'/" STXMarkdownView.podspec
 
+      - name: Configure deploy key
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git remote set-url origin git@github.com:${{ github.repository }}.git
+          git config core.sshCommand "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes"
+
       - name: Commit artifacts to default branch
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
