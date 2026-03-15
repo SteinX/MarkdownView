@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'STXMarkdownView'
-  s.version          = '1.0.0'
+  s.version          = '1.1.0'
   s.summary          = 'High-performance Markdown rendering for iOS with rich attachments and streaming support.'
 
   s.description      = <<-DESC
