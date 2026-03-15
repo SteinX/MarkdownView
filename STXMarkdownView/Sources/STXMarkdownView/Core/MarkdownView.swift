@@ -7,6 +7,146 @@ import os
 /// Extends MarkdownTextView to inherit attachment layout handling.
 open class MarkdownView: MarkdownTextView {
     private static let widthEpsilon: CGFloat = 0.5
+
+    public struct RenderPipelineStats {
+        public let markdownAssignments: Int
+        public let streamingSchedules: Int
+        public let throttledExecutes: Int
+        public let renderCalls: Int
+        public let renderSkips: Int
+        public let widthUnavailable: Int
+        public let attachmentCreated: Int
+        public let attachmentPreserved: Int
+        public let attachmentRecycled: Int
+        public let incrementalUpdates: Int
+        public let fullInvalidations: Int
+        public let layoutSubviewsCalls: Int
+        public let tableFullLayoutPasses: Int
+
+        public static let zero = RenderPipelineStats(
+            markdownAssignments: 0,
+            streamingSchedules: 0,
+            throttledExecutes: 0,
+            renderCalls: 0,
+            renderSkips: 0,
+            widthUnavailable: 0,
+            attachmentCreated: 0,
+            attachmentPreserved: 0,
+            attachmentRecycled: 0,
+            incrementalUpdates: 0,
+            fullInvalidations: 0,
+            layoutSubviewsCalls: 0,
+            tableFullLayoutPasses: 0
+        )
+    }
+
+    private final class RenderPipelineStatsCollector {
+        private var _markdownAssignments = 0
+        private var _streamingSchedules = 0
+        private var _throttledExecutes = 0
+        private var _renderCalls = 0
+        private var _renderSkips = 0
+        private var _widthUnavailable = 0
+        private var _attachmentCreated = 0
+        private var _attachmentPreserved = 0
+        private var _attachmentRecycled = 0
+        private var _incrementalUpdates = 0
+        private var _fullInvalidations = 0
+        private var _layoutSubviewsCalls = 0
+        private var _tableFullLayoutPasses = 0
+
+        func snapshot(isEnabled: Bool) -> RenderPipelineStats {
+            guard isEnabled else { return .zero }
+            return RenderPipelineStats(
+                markdownAssignments: _markdownAssignments,
+                streamingSchedules: _streamingSchedules,
+                throttledExecutes: _throttledExecutes,
+                renderCalls: _renderCalls,
+                renderSkips: _renderSkips,
+                widthUnavailable: _widthUnavailable,
+                attachmentCreated: _attachmentCreated,
+                attachmentPreserved: _attachmentPreserved,
+                attachmentRecycled: _attachmentRecycled,
+                incrementalUpdates: _incrementalUpdates,
+                fullInvalidations: _fullInvalidations,
+                layoutSubviewsCalls: _layoutSubviewsCalls,
+                tableFullLayoutPasses: _tableFullLayoutPasses
+            )
+        }
+
+        func reset() {
+            _markdownAssignments = 0
+            _streamingSchedules = 0
+            _throttledExecutes = 0
+            _renderCalls = 0
+            _renderSkips = 0
+            _widthUnavailable = 0
+            _attachmentCreated = 0
+            _attachmentPreserved = 0
+            _attachmentRecycled = 0
+            _incrementalUpdates = 0
+            _fullInvalidations = 0
+            _layoutSubviewsCalls = 0
+            _tableFullLayoutPasses = 0
+        }
+
+        func markMarkdownAssignment(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _markdownAssignments &+= 1
+        }
+
+        func markStreamingSchedule(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _streamingSchedules &+= 1
+        }
+
+        func markThrottledExecute(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _throttledExecutes &+= 1
+        }
+
+        func markRenderCall(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _renderCalls &+= 1
+        }
+
+        func markRenderSkip(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _renderSkips &+= 1
+        }
+
+        func markWidthUnavailable(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _widthUnavailable &+= 1
+        }
+
+        func markAttachmentStats(isEnabled: Bool, created: Int, preserved: Int, recycled: Int) {
+            guard isEnabled else { return }
+            _attachmentCreated &+= created
+            _attachmentPreserved &+= preserved
+            _attachmentRecycled &+= recycled
+        }
+
+        func markIncrementalUpdate(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _incrementalUpdates &+= 1
+        }
+
+        func markFullInvalidation(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _fullInvalidations &+= 1
+        }
+
+        func markLayoutSubviewsCall(isEnabled: Bool) {
+            guard isEnabled else { return }
+            _layoutSubviewsCalls &+= 1
+        }
+
+        func markTableLayoutPasses(isEnabled: Bool, count: Int) {
+            guard isEnabled else { return }
+            _tableFullLayoutPasses &+= count
+        }
+    }
     
     // MARK: - Configuration
     
@@ -41,9 +181,12 @@ open class MarkdownView: MarkdownTextView {
     
     /// Throttle interval for streaming mode (default 100ms = 10 renders/sec)
     public var throttleInterval: TimeInterval = 0.1
+
+    public var isRenderPipelineStatsEnabled: Bool = false
     
     public var markdown: String = "" {
         didSet {
+            statsCollector.markMarkdownAssignment(isEnabled: isRenderPipelineStatsEnabled)
             if isStreaming {
                 // Streaming mode: throttle rendering
                 scheduleThrottledRender(newMarkdown: markdown)
@@ -84,6 +227,8 @@ open class MarkdownView: MarkdownTextView {
     // Streaming throttle state
     private var pendingMarkdown: String?
     private var throttleTimer: Timer?
+    private var throttleWindowDeadline: CFTimeInterval = 0
+    private let statsCollector = RenderPipelineStatsCollector()
     
     // Intrinsic size cache: avoids ensureLayout during UITableView batch updates for stable cells
     private var cachedIntrinsicSize: CGSize?
@@ -131,12 +276,14 @@ open class MarkdownView: MarkdownTextView {
         if width > 0 {
             render(with: width)
         } else {
+            statsCollector.markWidthUnavailable(isEnabled: isRenderPipelineStatsEnabled)
             // No width available, mark for later render in layoutSubviews
             setNeedsLayout()
         }
     }
     
     open override func layoutSubviews() {
+        statsCollector.markLayoutSubviewsCall(isEnabled: isRenderPipelineStatsEnabled)
         applyPreferredTextContainerWidth()
 
         // Check if we need to render (e.g., width wasn't available before)
@@ -160,10 +307,12 @@ open class MarkdownView: MarkdownTextView {
     }
     
     private func render(with width: CGFloat) {
+        statsCollector.markRenderCall(isEnabled: isRenderPipelineStatsEnabled)
         // O5: Skip render if markdown content is identical to last render at same width
         if markdown == lastRenderedMarkdown,
            abs(width - lastRenderedWidth) <= Self.widthEpsilon,
            renderInputVersion == lastRenderedInputVersion {
+            statsCollector.markRenderSkip(isEnabled: isRenderPipelineStatsEnabled)
             return
         }
         lastRenderedWidth = width
@@ -202,6 +351,8 @@ open class MarkdownView: MarkdownTextView {
         let renderer = MarkdownRenderer(theme: theme, imageHandler: imageHandler, maxLayoutWidth: width, tableSizeCache: tableSizeCache)
         
         // Phase 1: Parse
+        MarkdownTableView._computeLayoutCallCount = 0
+        let parseSignpostState = Self.renderSignposter.beginInterval("Parse", id: Self.renderSignposter.makeSignpostID())
         let result: RenderedMarkdown
         if let document = cachedDocument {
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
@@ -211,7 +362,11 @@ open class MarkdownView: MarkdownTextView {
             result = renderer.render(document, attachmentPool: _attachmentPool, codeBlockState: codeBlockState, isStreaming: isStreaming)
         }
         
+        Self.renderSignposter.endInterval("Parse", parseSignpostState)
+        let tablePassesDuringParse = MarkdownTableView._computeLayoutCallCount
+        
         // Phase 3: O6 Diff
+        let reconcileSignpostState = Self.renderSignposter.beginInterval("Reconcile", id: Self.renderSignposter.makeSignpostID())
         var finalAttachments = result.attachments
         var oldByKey: [AnyHashable: [(position: Int, info: AttachmentInfo)]] = [:]
         for (pos, info) in oldAttachments {
@@ -232,14 +387,26 @@ open class MarkdownView: MarkdownTextView {
         }
         
         let maxOldPos = oldAttachments.keys.max() ?? -1
+        var recycledCount = 0
         for entries in oldByKey.values {
             for entry in entries {
                 let isTrailing = recycleToStreamingPool && entry.position == maxOldPos
                 _attachmentPool.recycle(entry.info.view, anyKey: entry.info.contentKey, isStreaming: isTrailing)
+                recycledCount += 1
             }
         }
+        Self.renderSignposter.endInterval("Reconcile", reconcileSignpostState)
+        let preservedCount = preservedOldViewIDs.count
+        statsCollector.markAttachmentStats(
+            isEnabled: isRenderPipelineStatsEnabled,
+            created: result.attachments.count - preservedCount,
+            preserved: preservedCount,
+            recycled: recycledCount
+        )
+        statsCollector.markTableLayoutPasses(isEnabled: isRenderPipelineStatsEnabled, count: tablePassesDuringParse)
         
         // Phase 4: O7 Incremental TextStorage update
+        let textStorageSignpostState = Self.renderSignposter.beginInterval("TextStorage", id: Self.renderSignposter.makeSignpostID())
         var incrementalChangeStart: Int?
         if let previous = previousRenderedString {
             let newString = result.attributedString
@@ -268,23 +435,33 @@ open class MarkdownView: MarkdownTextView {
         previousRenderedString = result.attributedString
         lastRenderedMarkdown = markdown
         lastRenderedInputVersion = renderInputVersion
+        Self.renderSignposter.endInterval("TextStorage", textStorageSignpostState)
         
         // Phase 5: Layout + intrinsic size computation + attachment assignment
+        let layoutSignpostState = Self.renderSignposter.beginInterval("Layout", id: Self.renderSignposter.makeSignpostID())
         
         if let changeStart = incrementalChangeStart {
+            statsCollector.markIncrementalUpdate(isEnabled: isRenderPipelineStatsEnabled)
             let changedRange = NSRange(location: changeStart, length: textStorage.length - changeStart)
             layoutManager.invalidateLayout(forCharacterRange: changedRange, actualCharacterRange: nil)
         } else {
+            statsCollector.markFullInvalidation(isEnabled: isRenderPipelineStatsEnabled)
             layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textStorage.length), actualCharacterRange: nil)
         }
         layoutManager.ensureLayout(for: textContainer)
+        markAttachmentLayoutEnsured(forWidth: width)
         
         attachmentViews = finalAttachments
+        if let changeStart = incrementalChangeStart {
+            setNeedsAttachmentLayout(fromCharacterIndex: changeStart)
+            markAttachmentLayoutEnsured(forWidth: width)
+        }
         lastRenderedResult = RenderedMarkdown(attributedString: result.attributedString, attachments: finalAttachments)
         _attachmentPool.logStats(context: "after render")
         
         let maxPoolRetention = max(finalAttachments.count * 2, 10)
         _attachmentPool.trimToSize(maxPoolRetention)
+        Self.renderSignposter.endInterval("Layout", layoutSignpostState)
         
         let usedSize = layoutManager.usedRect(for: textContainer).size
         let insets = textContainerInset
@@ -292,6 +469,7 @@ open class MarkdownView: MarkdownTextView {
         let newWidth = ceil(usedSize.width + insets.left + insets.right)
         let newICS = CGSize(width: newWidth, height: newHeight)
         
+
         let previousHeight = cachedIntrinsicSize?.height ?? -1
         cachedIntrinsicSize = newICS
         cachedIntrinsicSizeContainerWidth = textContainer.size.width
@@ -314,24 +492,56 @@ open class MarkdownView: MarkdownTextView {
     // MARK: - Streaming Throttle
     
     private func scheduleThrottledRender(newMarkdown: String) {
-        // Save latest pending content
+        if pendingMarkdown == newMarkdown {
+            return
+        }
+
+        if isRenderInputEquivalentForCurrentWidth(newMarkdown) {
+            return
+        }
+
+        statsCollector.markStreamingSchedule(isEnabled: isRenderPipelineStatsEnabled)
         pendingMarkdown = newMarkdown
-        
-        // If timer already running, wait for it to trigger (don't create new one)
-        guard throttleTimer == nil else { return }
-        
-        // Leading edge: render immediately on first update, then throttle subsequent
-        executeThrottledRender()
-        
+
+        if throttleTimer != nil {
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        if now >= throttleWindowDeadline {
+            executeThrottledRender()
+            throttleWindowDeadline = CACurrentMediaTime() + throttleInterval
+            return
+        }
+
+        let delay = throttleWindowDeadline - now
+        if delay <= 0 {
+            executeThrottledRender()
+            throttleWindowDeadline = CACurrentMediaTime() + throttleInterval
+            return
+        }
+
         throttleTimer = Timer.scheduledTimer(
-            withTimeInterval: throttleInterval,
+            withTimeInterval: delay,
             repeats: false
         ) { [weak self] _ in
-            self?.executeThrottledRender()
+            guard let self else { return }
+            self.executeThrottledRender()
+            self.throttleWindowDeadline = CACurrentMediaTime() + self.throttleInterval
         }
+    }
+
+    private func isRenderInputEquivalentForCurrentWidth(_ markdown: String) -> Bool {
+        let width = preferredMaxLayoutWidth > 0 ? preferredMaxLayoutWidth : bounds.width
+        guard width > 0 else { return false }
+
+        return markdown == lastRenderedMarkdown
+            && abs(width - lastRenderedWidth) <= Self.widthEpsilon
+            && renderInputVersion == lastRenderedInputVersion
     }
     
     private func executeThrottledRender() {
+        statsCollector.markThrottledExecute(isEnabled: isRenderPipelineStatsEnabled)
         guard pendingMarkdown != nil else {
             throttleTimer = nil
             return
@@ -352,6 +562,7 @@ open class MarkdownView: MarkdownTextView {
             // ICS is already cached in Phase 5, so parent can query height without layout.
             setNeedsLayout()
         } else {
+            statsCollector.markWidthUnavailable(isEnabled: isRenderPipelineStatsEnabled)
             setNeedsLayout()
         }
     }
@@ -359,6 +570,7 @@ open class MarkdownView: MarkdownTextView {
     private func finalizeStreamingRender() {
         throttleTimer?.invalidate()
         throttleTimer = nil
+        throttleWindowDeadline = 0
         
         if pendingMarkdown != nil {
             pendingMarkdown = nil
@@ -422,6 +634,14 @@ open class MarkdownView: MarkdownTextView {
         
         return textPrefixLen
     }
+
+    public var renderPipelineStats: RenderPipelineStats {
+        statsCollector.snapshot(isEnabled: isRenderPipelineStatsEnabled)
+    }
+
+    public func resetRenderPipelineStats() {
+        statsCollector.reset()
+    }
     
     /// Call this before reusing the view (e.g., in prepareForReuse)
     public override func cleanUp() {
@@ -436,6 +656,7 @@ open class MarkdownView: MarkdownTextView {
         throttleTimer?.invalidate()
         throttleTimer = nil
         pendingMarkdown = nil
+        throttleWindowDeadline = 0
         lastRenderWasStreaming = false
         
         tableSizeCache.clearAll()

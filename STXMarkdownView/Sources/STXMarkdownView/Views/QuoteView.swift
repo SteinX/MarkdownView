@@ -122,14 +122,12 @@ public class QuoteView: UIView, Reusable {
 }
 
 public struct QuoteContentKey: AttachmentContentKey {
-    public let textHash: Int
-    public let attachmentsHash: Int
+    public let sourceHash: Int
     public let width: CGFloat
     public let isInsideQuote: Bool
 
-    public init(textHash: Int, attachmentsHash: Int, width: CGFloat, isInsideQuote: Bool) {
-        self.textHash = textHash
-        self.attachmentsHash = attachmentsHash
+    public init(sourceHash: Int, width: CGFloat, isInsideQuote: Bool) {
+        self.sourceHash = sourceHash
         self.width = width
         self.isInsideQuote = isInsideQuote
     }

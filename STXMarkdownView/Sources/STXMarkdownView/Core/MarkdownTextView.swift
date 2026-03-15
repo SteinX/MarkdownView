@@ -1,15 +1,20 @@
 import UIKit
+import os
 
 /// A UITextView subclass that handles positioning of custom attachment views.
 /// Used by MarkdownView, QuoteView, and MarkdownTableView for consistent attachment layout.
 open class MarkdownTextView: UITextView {
+    private static let layoutSignposter = OSSignposter(subsystem: "com.stx.markdown", category: "Layout")
     
     private(set) var needsAttachmentLayout = false
     private var lastAttachmentLayoutWidth: CGFloat = -1
+    private var lastEnsuredLayoutWidth: CGFloat = -1
+    private var minAttachmentLayoutCharIndex: Int?
     
     public var attachmentViews: [Int: AttachmentInfo] = [:] {
         didSet {
             needsAttachmentLayout = true
+            minAttachmentLayoutCharIndex = nil
             let oldViewIDs = Set(oldValue.values.map { ObjectIdentifier($0.view) })
             let newViewIDs = Set(attachmentViews.values.map { ObjectIdentifier($0.view) })
             for info in oldValue.values where !newViewIDs.contains(ObjectIdentifier(info.view)) {
@@ -26,6 +31,23 @@ open class MarkdownTextView: UITextView {
     /// Called by subclasses when textStorage content changes without attachmentViews being reassigned.
     func setNeedsAttachmentLayout() {
         needsAttachmentLayout = true
+        lastEnsuredLayoutWidth = -1
+        minAttachmentLayoutCharIndex = nil
+    }
+
+    func setNeedsAttachmentLayout(fromCharacterIndex index: Int) {
+        needsAttachmentLayout = true
+        lastEnsuredLayoutWidth = -1
+        let clamped = max(0, index)
+        if let existing = minAttachmentLayoutCharIndex {
+            minAttachmentLayoutCharIndex = min(existing, clamped)
+        } else {
+            minAttachmentLayoutCharIndex = clamped
+        }
+    }
+
+    func markAttachmentLayoutEnsured(forWidth width: CGFloat) {
+        lastEnsuredLayoutWidth = width
     }
 
     
@@ -103,15 +125,41 @@ open class MarkdownTextView: UITextView {
         guard needsAttachmentLayout || widthChanged else {
             return
         }
-        
-        layoutManager.ensureLayout(for: textContainer)
-        
+
         let attachmentCount = attachmentViews.count
+        guard attachmentCount > 0 else {
+            needsAttachmentLayout = false
+            minAttachmentLayoutCharIndex = nil
+            lastAttachmentLayoutWidth = currentWidth
+            return
+        }
+        
+        let layoutAlreadyEnsured = abs(currentWidth - lastEnsuredLayoutWidth) <= CGFloat.ulpOfOne
+        if !layoutAlreadyEnsured {
+            layoutManager.ensureLayout(for: textContainer)
+            lastEnsuredLayoutWidth = currentWidth
+        }
+
         if attachmentCount > 0 {
             MarkdownLogger.verbose(.layout, "layoutSubviews positioning \(attachmentCount) attachments")
         }
-        
+
+        let minCharIndexToLayout = widthChanged ? nil : minAttachmentLayoutCharIndex
+        if let minCharIndexToLayout {
+            let hasAffectedAttachment = attachmentViews.keys.contains { $0 >= minCharIndexToLayout }
+            if !hasAffectedAttachment {
+                needsAttachmentLayout = false
+                minAttachmentLayoutCharIndex = nil
+                lastAttachmentLayoutWidth = currentWidth
+                return
+            }
+        }
+
+        let attachmentLayoutSignpostState = Self.layoutSignposter.beginInterval("AttachmentLayout", id: Self.layoutSignposter.makeSignpostID())
         for (charIndex, info) in attachmentViews {
+            if let minCharIndexToLayout, charIndex < minCharIndexToLayout {
+                continue
+            }
             let view = info.view
             guard charIndex < (attributedText?.length ?? 0) else { continue }
             
@@ -143,8 +191,10 @@ open class MarkdownTextView: UITextView {
                 }
             }
         }
+        Self.layoutSignposter.endInterval("AttachmentLayout", attachmentLayoutSignpostState)
         
         needsAttachmentLayout = false
+        minAttachmentLayoutCharIndex = nil
         lastAttachmentLayoutWidth = currentWidth
     }
     
@@ -156,6 +206,7 @@ open class MarkdownTextView: UITextView {
         attachmentViews.removeAll()
         attributedText = nil
         lastAttachmentLayoutWidth = -1
+        lastEnsuredLayoutWidth = -1
     }
 
 }

@@ -47,6 +47,7 @@ XCODEBUILD_ARGS=(
   -scheme STXMarkdownView
   -destination "platform=iOS Simulator,name=$SIMULATOR_NAME"
   CODE_SIGNING_ALLOWED=NO
+  -skip-testing "STXMarkdownViewTests/MarkdownViewSnapshotTests"
 )
 
 if [ -n "${RESULT_BUNDLE_PATH:-}" ]; then

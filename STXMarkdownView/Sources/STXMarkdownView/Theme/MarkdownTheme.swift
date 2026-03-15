@@ -12,6 +12,14 @@ public struct MarkdownTheme {
     public let paragraphSpacing: CGFloat
     public let linkColor: UIColor
     public let separatorColor: UIColor
+
+    private let quotedColorsCache: LayoutColors
+    private let quotedCodeCache: CodeBlockTheme
+    private let quotedListsCache: ListTheme
+    private let quotedTablesCache: TableTheme
+    private let quotedImagesCache: ImageTheme
+    private let quotedLinkColorCache: UIColor
+    private let quotedSeparatorColorCache: UIColor
     
     // MARK: - Sub-Themes
     
@@ -218,6 +226,18 @@ public struct MarkdownTheme {
         self.paragraphSpacing = paragraphSpacing
         self.linkColor = linkColor
         self.separatorColor = separatorColor
+
+        self.quotedCodeCache = code.dimmed()
+        self.quotedListsCache = lists.dimmed()
+        self.quotedTablesCache = tables.dimmed()
+        self.quotedImagesCache = images.dimmed()
+        self.quotedColorsCache = LayoutColors(
+            text: quote.textColor,
+            secondaryText: quote.textColor.withAlphaComponent(0.8),
+            background: quote.backgroundColor
+        )
+        self.quotedLinkColorCache = linkColor.withAlphaComponent(0.8)
+        self.quotedSeparatorColorCache = separatorColor.withAlphaComponent(0.6)
     }
     
     // MARK: - Default Theme
@@ -299,36 +319,18 @@ public struct MarkdownTheme {
     // MARK: - Convenience for Dimmed/Quoted State
     
     public var quoted: MarkdownTheme {
-        // Use the dimmed versions of the sub-themes
-        // Override global text colors with quote specific ones (or combine)
-        
-
-        let newCode = code.dimmed()
-        let newLists = lists.dimmed()
-        let newTables = tables.dimmed()
-        let newImages = images.dimmed()
-        
-        // We might want to force specific text colors for the "main" quote text
-        // But for nested structures, dimmed colors are better.
-        // Let's create a hybrid:
-        let quoteColors = LayoutColors(
-            text: quote.textColor,
-            secondaryText: quote.textColor.withAlphaComponent(0.8),
-            background: quote.backgroundColor
-        )
-        
         return MarkdownTheme(
             baseFont: baseFont,
-            colors: quoteColors,
-            headings: headings, // Headings usually keep their relative size/weight
-            code: newCode,
-            quote: quote, // Nested quotes stay same for now
-            lists: newLists,
-            tables: newTables,
-            images: newImages,
+            colors: quotedColorsCache,
+            headings: headings,
+            code: quotedCodeCache,
+            quote: quote,
+            lists: quotedListsCache,
+            tables: quotedTablesCache,
+            images: quotedImagesCache,
             paragraphSpacing: paragraphSpacing,
-            linkColor: linkColor.withAlphaComponent(0.8),
-            separatorColor: separatorColor.withAlphaComponent(0.6)
+            linkColor: quotedLinkColorCache,
+            separatorColor: quotedSeparatorColorCache
         )
     }
 }

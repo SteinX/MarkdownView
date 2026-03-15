@@ -530,6 +530,408 @@ CREATE INDEX idx_events_type_time ON events (event_type, created_at DESC);
 - [ ] Create runbooks for each `critical path`
 """
 
+private let kQuoteHeavyDocument = """
+# Incident Postmortem - Regional Auth Outage
+
+> ## Timeline Summary
+> 
+> At 09:12 UTC, users in two regions began seeing intermittent login failures.
+> 
+> > ### Detection Signals
+> > 
+> > - API gateway error rate climbed from 0.3% to 14.8% within 4 minutes.
+> > - Auth cache hit ratio dropped from 93% to 41%.
+> > - Token minting latency crossed 800ms at P99.
+> > 
+> > ```swift
+> > struct AuthHealth {
+> >     let p50: Double
+> >     let p95: Double
+> >     let p99: Double
+> >     let errorRate: Double
+> > }
+> > 
+> > func degraded(_ h: AuthHealth) -> Bool {
+> >     h.errorRate > 0.05 || h.p99 > 400
+> > }
+> > ```
+> > 
+> > | Metric | Baseline | During Incident | Delta |
+> > |--------|----------|-----------------|-------|
+> > | Error Rate | 0.3% | 14.8% | +14.5% |
+> > | P99 Latency | 88ms | 842ms | +754ms |
+> > | Cache Hit | 93% | 41% | -52% |
+> > 
+> > > #### Root Cause Candidate A
+> > > 
+> > > A malformed issuer list propagated to one shard group and triggered
+> > > repeated fallback token validation.
+> > > 
+> > > ```bash
+> > > kubectl -n auth get pods -l app=issuer-sync
+> > > kubectl -n auth logs deploy/issuer-sync --tail=200
+> > > ```
+> > > 
+> > > > ##### Containment Step
+> > > > 
+> > > > Roll back issuer bundle to the previous signed revision and force reload.
+
+> ## Action Items
+> 
+> > 1. Add checksum gate before distributing issuer bundles.
+> > 2. Add shard-level circuit breaker around fallback validation.
+> > 3. Add SLO alert for cache hit ratio below 70% for 3 minutes.
+> > 
+> > | Owner | Item | Priority | ETA |
+> > |-------|------|----------|-----|
+> > | Security | checksum gate | P0 | 2 days |
+> > | Platform | circuit breaker | P0 | 3 days |
+> > | SRE | cache hit alert | P1 | 1 day |
+> > 
+> > ```json
+> > {
+> >   "incident": "auth-regional-outage",
+> >   "status": "mitigated",
+> >   "next_review": "2026-03-20T10:00:00Z",
+> >   "action_items": 3
+> > }
+> > ```
+
+Conclusion: apply staged rollout with quote-rich diagnostics enabled and verify
+all remediation checkpoints before enabling full traffic.
+"""
+
+private let kComprehensiveBaselineDocument = """
+# Platform Reliability Baseline **_Q2_** `v3.4` [Runbook](https://internal.example.com/runbooks/platform) ~~draft~~
+
+This fixture models a full production operations brief with mixed markdown features, nested structures, and streaming-friendly complexity.
+
+| Service | Owner | SLO | P50 (ms) | P95 (ms) | P99 (ms) | QPS | Error % | Region | Status |
+|---------|-------|-----|----------|----------|----------|-----|---------|--------|--------|
+| api-gateway | Edge Team | 99.95% | 12 | 34 | 71 | 12400 | 0.08 | us-east-1 | stable |
+| auth-service | Identity Team | 99.99% | 18 | 52 | 109 | 8600 | 0.11 | us-east-1 | monitoring |
+| billing-core | FinOps Team | 99.90% | 44 | 130 | 260 | 1700 | 0.21 | us-east-1 | stable |
+| ledger-writer | FinOps Team | 99.99% | 27 | 88 | 173 | 2100 | 0.09 | us-west-2 | stable |
+| catalog-index | Search Team | 99.90% | 32 | 118 | 242 | 5200 | 0.24 | eu-west-1 | degraded |
+| recommendation-api | ML Platform | 99.50% | 58 | 170 | 344 | 7400 | 0.63 | us-central-1 | tuning |
+| notification-router | Messaging Team | 99.90% | 21 | 66 | 140 | 9800 | 0.16 | ap-southeast-1 | stable |
+| media-transcoder | Media Infra | 99.00% | 95 | 410 | 880 | 460 | 1.20 | eu-central-1 | constrained |
+| report-exporter | Data Platform | 99.50% | 74 | 260 | 690 | 280 | 0.70 | us-west-2 | stable |
+| audit-stream | Security Ops | 99.99% | 14 | 39 | 95 | 11200 | 0.04 | us-east-1 | stable |
+| webhook-dispatcher | Integrations | 99.50% | 49 | 190 | 420 | 3100 | 0.82 | us-east-2 | retrying |
+| session-cache | Identity Team | 99.95% | 6 | 14 | 25 | 18800 | 0.03 | us-east-1 | stable |
+| feature-flag-proxy | DevEx | 99.90% | 9 | 25 | 56 | 14300 | 0.05 | global | stable |
+| incident-timeline | SRE Tooling | 99.00% | 66 | 240 | 610 | 320 | 0.94 | us-west-1 | backfill |
+| analytics-ingestor | Data Platform | 99.50% | 36 | 125 | 270 | 6900 | 0.37 | eu-west-1 | recovering |
+
+---
+
+## API and Execution Paths
+
+The backend rollout process combines compile-time safeguards, typed execution plans, and post-deploy verification jobs.
+
+```swift
+import Foundation
+
+struct DeploymentStep<T> {
+    let name: String
+    let transform: (T) throws -> T
+}
+
+func executePipeline<T>(
+    input: T,
+    steps: [DeploymentStep<T>],
+    onStep: (String, T) -> Void
+) rethrows -> T {
+    var current = input
+    for step in steps {
+        current = try step.transform(current)
+        onStep(step.name, current)
+    }
+    return current
+}
+
+let finalPlan = try executePipeline(input: ["canary", "regional"], steps: []) { name, state in
+    print("step=\\(name) state=\\(state)")
+}
+```
+
+```rust
+use std::collections::HashMap;
+
+#[derive(Debug)]
+struct NodeHealth {
+    region: String,
+    latency_ms: u32,
+    error_rate: f32,
+}
+
+impl NodeHealth {
+    fn classify(&self) -> &'static str {
+        match (self.latency_ms, self.error_rate) {
+            (0..=120, r) if r < 0.2 => "healthy",
+            (121..=250, r) if r < 0.7 => "watch",
+            _ => "critical",
+        }
+    }
+}
+
+fn summarize(nodes: Vec<NodeHealth>) -> HashMap<String, usize> {
+    let mut counts = HashMap::new();
+    for n in nodes {
+        *counts.entry(n.classify().to_string()).or_insert(0) += 1;
+    }
+    counts
+}
+```
+
+```json
+{
+  "deployment": {
+    "id": "dep-2026-06-17-1420",
+    "strategy": "canary_then_regional",
+    "windows": [
+      { "region": "us-east-1", "start": "14:20", "durationMin": 30 },
+      { "region": "eu-west-1", "start": "15:10", "durationMin": 40 }
+    ],
+    "guards": {
+      "maxErrorRate": 0.5,
+      "maxP99Ms": 280,
+      "rollbackOn": ["auth_failure_spike", "db_replica_lag"]
+    }
+  }
+}
+```
+
+```sql
+WITH error_spikes AS (
+    SELECT service_name, minute_bucket, error_rate
+    FROM svc_minute_metrics
+    WHERE minute_bucket >= NOW() - INTERVAL '30 minutes'
+      AND error_rate > 0.5
+),
+candidate_rollbacks AS (
+    SELECT d.deploy_id, d.service_name, d.region
+    FROM deployments d
+    JOIN error_spikes e ON e.service_name = d.service_name
+    WHERE d.started_at >= NOW() - INTERVAL '2 hours'
+)
+SELECT c.deploy_id, c.service_name, c.region
+FROM candidate_rollbacks c
+WHERE EXISTS (
+    SELECT 1 FROM incident_flags f
+    WHERE f.service_name = c.service_name
+      AND f.flag_type IN ('auth_failure_spike', 'db_replica_lag')
+);
+```
+
+### Deeply Nested Incident Narrative
+
+> Level 1 summary: **customer impact** was visible in dashboard aggregates and _support ticket velocity_.
+>
+> > Level 2 analysis: service mesh retries hid early symptoms, but `token.refresh` saturation was measurable.
+> >
+> > > Level 3 root signal: auth node `use1-auth-04` entered a hot loop after malformed issuer list refresh.
+> > >
+> > > ```bash
+> > > kubectl -n identity get pods -l app=auth-service
+> > > kubectl -n identity logs deploy/auth-service --since=20m
+> > > kubectl -n identity describe configmap issuer-list
+> > > ```
+> > >
+> > > | Symptom | Before | During |
+> > > |---------|--------|--------|
+> > > | refresh p99 | 102ms | 711ms |
+> > > | token errors | 0.08% | 3.40% |
+> > > | retries/request | 1.1 | 4.9 |
+> > >
+> > > - **Escalation path:** notify SRE primary and identity lead.
+> > > - _Mitigation path:_ pin issuer bundle to previous signed revision.
+> > > - **_Validation:_** compare canary and baseline using `auth_token_refresh_latency_p99`.
+
+#### Complex Work Plan Lists
+
+1. Prepare cross-region release checklist for baseline migration.
+   This paragraph records assumptions about data shape, feature flags, and runtime contracts.
+   1. Validate upstream schema compatibility for event consumers.
+      This level confirms consumer lag and compatibility gates.
+      1. Execute preflight verifier and attach output for audit trail.
+         ```bash
+         ./bin/preflight --env prod --service billing-core --check schema
+         ./bin/preflight --env prod --service billing-core --check permissions
+         ```
+      2. Review dependency matrix and identify unknown ownership.
+         | Dependency | Owner | Action |
+         |------------|-------|--------|
+         | tax-engine | FinOps | align contract version |
+         | invoice-store | Data | verify rollback snapshot |
+   2. Coordinate batch migration windows with support and compliance.
+      This level captures policy constraints and user communication windows.
+      1. Generate customer-facing maintenance note and internal routing plan.
+         ```json
+         {
+           "noticeWindow": "2026-06-18T02:00:00Z",
+           "channels": ["status-page", "email", "support-chat"],
+           "impact": "intermittent invoice generation delays"
+         }
+         ```
+      2. Build exception list for contractual no-downtime accounts.
+         | Account Tier | Constraint | Contact |
+         |--------------|------------|---------|
+         | Enterprise Platinum | no delay > 30s | csm-platinum@corp |
+         | Public Sector | change freeze window | gov-success@corp |
+   > Governance reminder: all migrations must include rollback proof and retention verification.
+2. Execute phased rollout with hardened observability.
+   This paragraph tracks progress markers for each phase and fallback criteria.
+   - Canary phase includes synthetic load plus selected production tenants.
+     1. Observe canary for 20 minutes with error budget guardrails.
+     2. Promote if p99 and error rate remain below thresholds.
+   - Regional phase applies weighted routing by stable cohort size.
+     1. Expand to 25%, 50%, and 100% traffic in sequence.
+     2. Hold for 10 minutes between steps and verify queue depth.
+3. Finalize post-release audit and learning backlog.
+   > Post-release retro must include architecture, operations, and support stakeholders.
+   > Add one action that improves change safety and one that improves diagnosis speed.
+
+1. Mixed nesting validation entry point
+   - Region runbook references and operator notes
+     1. Ordered remediation sequence for cache divergence
+     2. Ordered remediation sequence for stale token grants
+   - Region-specific toggles
+     1. us-east-1 toggle state matrix
+     2. eu-west-1 toggle state matrix
+   - Escalation channels
+     1. Pager rotation and backup owner
+     2. Incident commander handoff checklist
+
+- [x] Confirm migration plan includes **customer impact** statement
+- [ ] Verify `feature.payment_retry_v2` default state in all regions
+- [x] Archive previous runbooks with change control links
+- [ ] Trigger dry-run of rollback automation with _synthetic events_
+- [ ] Validate dashboards include `queue.backlog.seconds` and **P99**
+
+##### Images and Inline Rendering
+
+![Architecture Overview](https://via.placeholder.com/800x400.png)
+
+The incident brief links an inline diagram ![Inline Sequence](https://via.placeholder.com/800x400.png) and references **rollback SLA**, _operator runbook_, `incident.timeline`, and ~~deprecated webhook path~~ in one paragraph.
+
+> Evidence packet contains screenshot:
+>
+> ![Quote Embedded Screenshot](https://via.placeholder.com/800x400.png)
+
+| Artifact | Preview | Notes |
+|----------|---------|-------|
+| dashboard | ![Dashboard Thumbnail](https://via.placeholder.com/800x400.png) | Captured at 14:42 UTC after rollback |
+| queue-depth | ![Queue Snapshot](https://via.placeholder.com/800x400.png) | Shows backlog recovery trajectory |
+
+1. Deployment evidence bundle
+   ![List Item Evidence](https://via.placeholder.com/800x400.png)
+   Includes links to [timeline](https://status.example.com/incidents/2026-06-17), **metrics dump**, and `build-4821` notes.
+2. Compliance evidence bundle
+   ![Compliance Packet](https://via.placeholder.com/800x400.png)
+   Includes signed approvals, _risk acceptance_, and ~~legacy PDF export~~ migration plan.
+
+###### Stress Pattern Matrix and Edge Cases
+
+1. Nested container stress case
+   > Table in quote nested inside list item:
+   >
+   > | Check | Result | Comment |
+   > |-------|--------|---------|
+   > | parse depth | pass | renderer handled nested blocks |
+   > | layout width | pass | table compressed at narrow width |
+   > | reuse hit-rate | watch | warm pool below expected p50 |
+
+2. Quote containing list containing code block
+   > - Streaming inspection checkpoints
+   >   - validate chunk boundaries around fenced code
+   >   - validate quote prefix retention during incremental updates
+   >   - sample parser state transitions:
+   >
+   >     ```swift
+   >     let chunks = makeStreamingChunks(from: doc, chunkSize: 35)
+   >     for c in chunks {
+   >         let ast = renderer.parse(c)
+   >         let state = CodeBlockAnalyzer.analyze(c)
+   >         _ = renderer.render(ast, attachmentPool: pool, codeBlockState: state, isStreaming: true)
+   >     }
+   >     ```
+
+3. Long single-line cell stress table
+
+| ID | LongText | Expected |
+|----|----------|----------|
+| LT-1 | This single line intentionally concatenates service contracts, ownership metadata, and incident tags to force wide measurement without natural wrap opportunities in baseline rendering path alpha-beta-gamma-delta-epsilon-zeta-theta-iota-kappa-lambda. | should wrap or scroll without clipping |
+| LT-2 | This single line intentionally includes serialized payload style text {"service":"webhook-dispatcher","region":"us-east-2","retryPolicy":"exp-backoff-7","budget":"strict"} to stress intrinsic sizing and row height reconciliation in table layout pass. | should preserve row stability across frames |
+| LT-3 | This single line intentionally mixes URLs https://ops.example.com/a/b/c/d/e/f and inline tokens api.gateway.route.validation.mode=strict while keeping no manual line breaks for difficult text measurement. | should avoid runaway layout time |
+
+---
+---
+---
+
+```python
+def summarize_incident(services):
+    unhealthy = [s for s in services if s["errorRate"] > 0.5]
+    return {
+        "total": len(services),
+        "unhealthy": len(unhealthy),
+        "regions": sorted({s["region"] for s in services}),
+    }
+```
+
+```yaml
+release:
+  id: rel-2026-06-17
+  policy: guarded
+  approvals:
+    - sre-primary
+    - product-owner
+    - compliance
+  rollback:
+    trigger:
+      maxErrorRate: 0.5
+      maxP99Ms: 300
+```
+
+Operational chronology for baseline realism:
+- 14:20 UTC rollout started in us-east-1 with 5% canary routing.
+- 14:24 UTC cache miss spike appeared on auth-service and recommendation-api.
+- 14:27 UTC SRE engaged incident commander and froze regional promotions.
+- 14:31 UTC issuer list rollback executed with signed artifact pin.
+- 14:35 UTC p99 latency dropped below 220ms for auth token refresh.
+- 14:42 UTC queue backlog normalized for webhook-dispatcher workers.
+- 14:46 UTC customer-facing status updated with mitigation details.
+- 14:55 UTC read-only audit export completed for compliance review.
+- 15:10 UTC post-incident patch drafted with additional schema guards.
+- 15:30 UTC retro scheduled with platform, identity, and support leads.
+
+Extended architecture notes:
+- API gateway uses weighted routing and per-tenant policy filters.
+- Identity service signs access tokens with regional key rotation.
+- Billing and ledger systems share immutable event contracts.
+- Recommendation service reads from feature store snapshots.
+- Notification router maintains multi-channel fanout queues.
+- Analytics ingestor batches events with lossless retry semantics.
+- Audit stream remains append-only and encrypted at rest.
+
+Postmortem action matrix:
+| Action | Team | Due Date | Type |
+|--------|------|----------|------|
+| add issuer checksum verification | Identity | 2026-06-20 | prevention |
+| add queue age alert in incident dashboard | Messaging | 2026-06-21 | detection |
+| add retry jitter cap for webhook dispatcher | Integrations | 2026-06-22 | mitigation |
+| add schema drift gate in CI | DevEx | 2026-06-24 | prevention |
+| add rollback dry-run in weekly game day | SRE | 2026-06-25 | readiness |
+
+Final verification checklist:
+- Ensure all dashboards include links to source metrics and alert definitions.
+- Ensure all runbooks list owner, escalation policy, and rollback command.
+- Ensure all release notes include customer impact and support contact path.
+- Ensure all automated checks run in staging and production shadow mode.
+- Ensure all postmortem actions map to measurable reliability outcomes.
+"""
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MARK: - StreamingPerformanceTests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -670,12 +1072,38 @@ final class StreamingPerformanceTests: XCTestCase {
         }
     }
 
+    func testStreamingFrameTime_QuoteHeavyDocument() {
+        let chunks = makeStreamingChunks(from: kQuoteHeavyDocument, chunkSize: 28)
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()], options: options) {
+            for chunk in chunks {
+                sut.markdown = chunk
+                sut.layoutIfNeeded()
+            }
+            sut.markdown = ""
+        }
+    }
+
     /// Simulates a long AI conversation: kFullComplexDocument repeated 3×.
     /// Tests pool eviction under sustained streaming with high attachment count.
     func testStreamingFrameTime_ExtendedSession() {
         let extendedDoc = [kFullComplexDocument, kMixedContentDocument, kDeepNestDocument]
             .joined(separator: "\n\n---\n\n")
         let chunks = makeStreamingChunks(from: extendedDoc, chunkSize: 40)
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()], options: options) {
+            for chunk in chunks {
+                sut.markdown = chunk
+                sut.layoutIfNeeded()
+            }
+            sut.markdown = ""
+        }
+    }
+
+    func testStreamingFrameTime_ComprehensiveBaseline() {
+        let chunks = makeStreamingChunks(from: kComprehensiveBaselineDocument, chunkSize: 35)
         let options = XCTMeasureOptions()
         options.iterationCount = 3
         measure(metrics: [XCTClockMetric(), XCTCPUMetric(), XCTMemoryMetric()], options: options) {
@@ -739,6 +1167,18 @@ final class StreamingPerformanceTests: XCTestCase {
         attachReport(report, name: "FrameTimingDistribution_FullComplexDocument")
     }
 
+    func testFrameTimingDistribution_QuoteHeavyDocument() {
+        let chunks = makeStreamingChunks(from: kQuoteHeavyDocument, chunkSize: 28)
+        let report = collectFrameTimingReport(chunks: chunks, label: "QuoteHeavyDocument")
+        attachReport(report, name: "FrameTimingDistribution_QuoteHeavyDocument")
+    }
+
+    func testFrameTimingDistribution_ComprehensiveBaseline() {
+        let chunks = makeStreamingChunks(from: kComprehensiveBaselineDocument, chunkSize: 35)
+        let report = collectFrameTimingReport(chunks: chunks, label: "ComprehensiveBaseline")
+        attachReport(report, name: "FrameTimingDistribution_ComprehensiveBaseline")
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // MARK: Machine-Readable Performance Summary (Wave 0)
     // ─────────────────────────────────────────────────────────────────────────
@@ -753,6 +1193,8 @@ final class StreamingPerformanceTests: XCTestCase {
             ("DeepNest", kDeepNestDocument, 30),
             ("MixedContent", kMixedContentDocument, 30),
             ("FullComplex", kFullComplexDocument, 30),
+            ("QuoteHeavy", kQuoteHeavyDocument, 28),
+            ("ComprehensiveBaseline", kComprehensiveBaselineDocument, 35),
         ]
 
         var results: [DocumentTimingResult] = []
@@ -789,6 +1231,8 @@ final class StreamingPerformanceTests: XCTestCase {
             ("DeepNest", kDeepNestDocument, 30),
             ("MixedContent", kMixedContentDocument, 30),
             ("FullComplex", kFullComplexDocument, 30),
+            ("QuoteHeavy", kQuoteHeavyDocument, 28),
+            ("ComprehensiveBaseline", kComprehensiveBaselineDocument, 35),
         ]
 
         var results: [DocumentTimingResult] = []
@@ -801,6 +1245,46 @@ final class StreamingPerformanceTests: XCTestCase {
         let comparison = compareWithBaseline(results, baselinePath: baselinePath)
         print(comparison)
         attachReport(comparison, name: "PerformanceComparison")
+    }
+
+    func testStreamingObservabilityToggleComparison_FullComplexDocument() {
+        let chunks = makeStreamingChunks(from: kFullComplexDocument, chunkSize: 30)
+
+        let disabledRun = collectFrameTimingData(chunks: chunks, statsEnabled: false)
+        let enabledRun = collectFrameTimingData(chunks: chunks, statsEnabled: true)
+
+        let disabledResult = makeTimingResult(label: "StatsDisabled", frameTimes: disabledRun.frameTimes)
+        let enabledResult = makeTimingResult(label: "StatsEnabled", frameTimes: enabledRun.frameTimes)
+
+        let avgDeltaPct = disabledResult.avg_ms > 0
+            ? ((enabledResult.avg_ms - disabledResult.avg_ms) / disabledResult.avg_ms) * 100
+            : 0
+        let p99DeltaPct = disabledResult.p99_ms > 0
+            ? ((enabledResult.p99_ms - disabledResult.p99_ms) / disabledResult.p99_ms) * 100
+            : 0
+
+        let report = buildObservabilityToggleReport(
+            disabledResult: disabledResult,
+            enabledResult: enabledResult,
+            disabledStats: disabledRun.stats,
+            enabledStats: enabledRun.stats,
+            avgDeltaPct: avgDeltaPct,
+            p99DeltaPct: p99DeltaPct
+        )
+
+        print(report)
+        attachReport(report, name: "StreamingObservabilityToggleComparison_FullComplex")
+
+        XCTAssertEqual(disabledRun.stats.markdownAssignments, 0)
+        XCTAssertEqual(disabledRun.stats.streamingSchedules, 0)
+        XCTAssertEqual(disabledRun.stats.throttledExecutes, 0)
+        XCTAssertEqual(disabledRun.stats.renderCalls, 0)
+        XCTAssertEqual(disabledRun.stats.renderSkips, 0)
+
+        XCTAssertGreaterThan(enabledRun.stats.markdownAssignments, 0)
+        XCTAssertGreaterThan(enabledRun.stats.streamingSchedules, 0)
+        XCTAssertGreaterThan(enabledRun.stats.throttledExecutes, 0)
+        XCTAssertGreaterThan(enabledRun.stats.renderCalls, 0)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -919,6 +1403,17 @@ final class StreamingPerformanceTests: XCTestCase {
         }
     }
 
+    func testASTParseTime_ComprehensiveBaseline() {
+        let renderer = MarkdownRenderer(
+            theme: makeTestTheme(),
+            maxLayoutWidth: renderWidth,
+            tableSizeCache: TableCellSizeCache()
+        )
+        measure(metrics: [XCTClockMetric()]) {
+            _ = renderer.parse(kComprehensiveBaselineDocument)
+        }
+    }
+
     // ── Non-Streaming Table Benchmark (Wave 2) ──────────────────────────────
     // Renders kLargeTableDocument repeatedly at the same width to measure
     // O1 (layout cache) and O3 (cell parse cache) effectiveness.
@@ -990,6 +1485,39 @@ final class StreamingPerformanceTests: XCTestCase {
         """
         print(report)
         attachReport(report, name: "NonStreamingFullComplexCacheEffectiveness")
+    }
+
+    func testNonStreamingTableLayout_ComprehensiveBaseline_CacheEffectiveness() {
+        let repeatCount = 10
+        var frameTimes: [Double] = []
+
+        for _ in 0 ..< repeatCount {
+            sut.markdown = ""
+            sut.layoutIfNeeded()
+
+            let t0 = CACurrentMediaTime()
+            sut.markdown = kComprehensiveBaselineDocument
+            sut.layoutIfNeeded()
+            frameTimes.append(CACurrentMediaTime() - t0)
+        }
+
+        let cold = frameTimes[0]
+        let warm = frameTimes.dropFirst().sorted()
+        let warmP50 = warm[warm.count / 2]
+        let warmP95 = warm[max(0, min(Int(Double(warm.count) * 0.95), warm.count - 1))]
+
+        let speedup = ((cold - warmP50) / cold) * 100
+        let report = """
+        ┌─ Non-Streaming ComprehensiveBaseline Cache Effectiveness ────
+        │ Cold render (1st):      \(String(format: "%.3f", cold * 1000))ms
+        │ Warm P50 (renders 2-N): \(String(format: "%.3f", warmP50 * 1000))ms
+        │ Warm P95 (renders 2-N): \(String(format: "%.3f", warmP95 * 1000))ms
+        │ Speedup (cold→warm):    \(String(format: "%.1f", speedup))%
+        │ Renders: \(repeatCount)
+        └─────────────────────────────────────────────────────────────────
+        """
+        print(report)
+        attachReport(report, name: "NonStreamingComprehensiveBaselineCacheEffectiveness")
     }
 
     // ── I22: CodeBlockAnalyzer Fence Scan ────────────────────────────────────
@@ -1128,6 +1656,23 @@ final class StreamingPerformanceTests: XCTestCase {
 
         measure(metrics: [XCTClockMetric(), XCTCPUMetric()]) {
             let freshDoc = renderer.parse(kFullComplexDocument)
+            _ = renderer.render(freshDoc, attachmentPool: pool, codeBlockState: state, isStreaming: true)
+        }
+    }
+
+    func testRendererRoundTrip_WarmPool_ComprehensiveBaseline() {
+        let pool = AttachmentPool()
+        let renderer = MarkdownRenderer(
+            theme: makeTestTheme(),
+            maxLayoutWidth: renderWidth,
+            tableSizeCache: TableCellSizeCache()
+        )
+        let doc = renderer.parse(kComprehensiveBaselineDocument)
+        let state = CodeBlockAnalyzer.analyze(kComprehensiveBaselineDocument)
+        _ = renderer.render(doc, attachmentPool: pool, codeBlockState: state, isStreaming: true)
+
+        measure(metrics: [XCTClockMetric(), XCTCPUMetric()]) {
+            let freshDoc = renderer.parse(kComprehensiveBaselineDocument)
             _ = renderer.render(freshDoc, attachmentPool: pool, codeBlockState: state, isStreaming: true)
         }
     }
@@ -1342,6 +1887,30 @@ final class StreamingPerformanceTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+
+    func testPoolHitRateDuringStreamingSession_ComprehensiveBaseline() {
+        let pool = AttachmentPool()
+        let renderer = MarkdownRenderer(
+            theme: makeTestTheme(),
+            maxLayoutWidth: renderWidth,
+            tableSizeCache: TableCellSizeCache()
+        )
+        let chunks = makeStreamingChunks(from: kComprehensiveBaselineDocument, chunkSize: 35)
+        for chunk in chunks {
+            let doc = renderer.parse(chunk)
+            let state = CodeBlockAnalyzer.analyze(chunk)
+            _ = renderer.render(doc, attachmentPool: pool, codeBlockState: state, isStreaming: true)
+        }
+        pool.logStats(context: "ComprehensiveBaseline streaming — \(chunks.count) frames")
+
+        let attachment = XCTAttachment(
+            string: "Pool stats logged to console. Session: \(chunks.count) frames of ComprehensiveBaseline."
+        )
+        attachment.name = "PoolStats_ComprehensiveBaselineStreaming"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
 
     // ─────────────────────────────────────────────────────────────────────────────
     // MARK: - Chat Scenario Profiling
@@ -1630,6 +2199,12 @@ private extension StreamingPerformanceTests {
         let total: Double
     }
 
+    struct ObservabilityToggleRun {
+        let frameTimes: [Double]
+        let stats: MarkdownView.RenderPipelineStats
+    }
+
+
     func buildChatScenarioReport(
         withCompleted: [ChatTickProfile],
         withoutCompleted: [ChatTickProfile]
@@ -1710,5 +2285,63 @@ private extension StreamingPerformanceTests {
 
         lines.append("└──────────────────────────────────────────────────────────")
         return lines.joined(separator: "\n")
+    }
+
+    func collectFrameTimingData(chunks: [String], statsEnabled: Bool) -> ObservabilityToggleRun {
+        let originalIsStreaming = sut.isStreaming
+        let originalThrottleInterval = sut.throttleInterval
+
+        sut.isStreaming = true
+        sut.throttleInterval = 0.001
+        sut.isRenderPipelineStatsEnabled = statsEnabled
+        sut.resetRenderPipelineStats()
+
+        var frameTimes: [Double] = []
+        frameTimes.reserveCapacity(chunks.count)
+        for chunk in chunks {
+            let t0 = CACurrentMediaTime()
+            sut.markdown = chunk
+            RunLoop.main.run(until: Date().addingTimeInterval(sut.throttleInterval * 2))
+            sut.layoutIfNeeded()
+            frameTimes.append(CACurrentMediaTime() - t0)
+        }
+        RunLoop.main.run(until: Date().addingTimeInterval(sut.throttleInterval * 2))
+
+        let stats = sut.renderPipelineStats
+        sut.markdown = ""
+        sut.isStreaming = originalIsStreaming
+        sut.throttleInterval = originalThrottleInterval
+        sut.isRenderPipelineStatsEnabled = false
+        sut.resetRenderPipelineStats()
+
+        return ObservabilityToggleRun(frameTimes: frameTimes, stats: stats)
+    }
+
+    func buildObservabilityToggleReport(
+        disabledResult: DocumentTimingResult,
+        enabledResult: DocumentTimingResult,
+        disabledStats: MarkdownView.RenderPipelineStats,
+        enabledStats: MarkdownView.RenderPipelineStats,
+        avgDeltaPct: Double,
+        p99DeltaPct: Double
+    ) -> String {
+        let report = """
+        ┌──────────────────────────────────────────────────────────
+        │ STREAMING OBSERVABILITY TOGGLE COMPARISON (FullComplex)
+        ├──────────────────────────────────────────────────────────
+        │ Stats Disabled: avg=\(String(format: "%.3f", disabledResult.avg_ms))ms p99=\(String(format: "%.3f", disabledResult.p99_ms))ms frames=\(disabledResult.frames)
+        │ Stats Enabled : avg=\(String(format: "%.3f", enabledResult.avg_ms))ms p99=\(String(format: "%.3f", enabledResult.p99_ms))ms frames=\(enabledResult.frames)
+        │ Delta (enabled - disabled): avg=\(String(format: "%+.2f", avgDeltaPct))% p99=\(String(format: "%+.2f", p99DeltaPct))%
+        ├──────────────────────────────────────────────────────────
+        │ Collector snapshot when disabled
+        │ assignments=\(disabledStats.markdownAssignments) schedules=\(disabledStats.streamingSchedules) executes=\(disabledStats.throttledExecutes)
+        │ renderCalls=\(disabledStats.renderCalls) renderSkips=\(disabledStats.renderSkips) widthUnavailable=\(disabledStats.widthUnavailable)
+        ├──────────────────────────────────────────────────────────
+        │ Collector snapshot when enabled
+        │ assignments=\(enabledStats.markdownAssignments) schedules=\(enabledStats.streamingSchedules) executes=\(enabledStats.throttledExecutes)
+        │ renderCalls=\(enabledStats.renderCalls) renderSkips=\(enabledStats.renderSkips) widthUnavailable=\(enabledStats.widthUnavailable)
+        └──────────────────────────────────────────────────────────
+        """
+        return report
     }
 }
