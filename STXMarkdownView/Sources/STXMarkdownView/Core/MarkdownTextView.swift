@@ -178,11 +178,14 @@ open class MarkdownTextView: UITextView {
             let finalRect = rect.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)
             
             if view.frame != finalRect {
-                let sizeChanged = abs(view.frame.width - finalRect.width) > 0.5
-                    || abs(view.frame.height - finalRect.height) > 0.5
-
+                // O8: Skip setNeedsLayout for position-only moves. UIKit automatically
+                // triggers layoutSubviews when bounds.size changes via frame assignment.
+                // During streaming, existing attachments shift down (same size, new origin)
+                // — forcing internal re-layout of tables/code blocks is unnecessary and
+                // is the primary source of ~100ms P99 layout overhead.
+                let sizeChanged = abs(view.bounds.width - finalRect.width) > 0.5
+                    || abs(view.bounds.height - finalRect.height) > 0.5
                 view.frame = finalRect
-
                 if sizeChanged {
                     view.setNeedsLayout()
                 }

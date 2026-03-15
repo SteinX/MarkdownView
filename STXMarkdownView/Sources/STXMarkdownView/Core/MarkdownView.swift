@@ -469,6 +469,7 @@ open class MarkdownView: MarkdownTextView {
         let newWidth = ceil(usedSize.width + insets.left + insets.right)
         let newICS = CGSize(width: newWidth, height: newHeight)
         
+
         let previousHeight = cachedIntrinsicSize?.height ?? -1
         cachedIntrinsicSize = newICS
         cachedIntrinsicSizeContainerWidth = textContainer.size.width

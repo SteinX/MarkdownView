@@ -1911,6 +1911,7 @@ final class StreamingPerformanceTests: XCTestCase {
         add(attachment)
     }
 
+
     // ─────────────────────────────────────────────────────────────────────────────
     // MARK: - Chat Scenario Profiling
     // ─────────────────────────────────────────────────────────────────────────────
@@ -2202,6 +2203,7 @@ private extension StreamingPerformanceTests {
         let frameTimes: [Double]
         let stats: MarkdownView.RenderPipelineStats
     }
+
 
     func buildChatScenarioReport(
         withCompleted: [ChatTickProfile],
