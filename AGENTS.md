@@ -1,8 +1,8 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-08
-**Commit:** 3658c3e
-**Branch:** chore/badges
+**Generated:** 2026-03-15
+**Commit:** 2e1863b
+**Branch:** main
 
 ## OVERVIEW
 
@@ -20,12 +20,12 @@ ios-markdown-demo/
 │   │   ├── Image/                # ImageCache (2-tier), async loading
 │   │   └── Utils/                # AttachmentPool, ContentKey, CodeBlockAnalyzer, Logger, TableSizeCache
 │   └── Tests/
-│       ├── Core/                 # Parser tests
+│       ├── Core/                 # Parser tests (3 files: InlineParser, MarkdownParser, MarkdownRenderer)
 │       ├── Views/                # View unit tests (4 files)
 │       ├── Utils/                # AttachmentPool, ContentKey, Cache tests (6 files)
 │       ├── Theme/                # Theme tests
-│       ├── Integration/          # Full render pipeline tests
-│       ├── Performance/          # StreamingPerformanceTests (1400+ lines)
+│       ├── Integration/          # Full render pipeline + streaming invariants (4 files)
+│       ├── Performance/          # Streaming benchmarks + memory/hitch profiling (3 files, 3000+ lines)
 │       ├── Snapshot/             # Visual regression (library-level)
 │       └── Helpers/              # Test utilities
 ├── MarkdownDemo/                 # UIKit demo app
@@ -34,7 +34,8 @@ ios-markdown-demo/
 │   ├── StreamingSimulator.swift  # Incremental text feeding (1-3 chars/tick)
 │   └── ChatBubbleCell.swift      # Bubble cell with MarkdownView
 ├── MarkdownDemoSnapshotTests/    # App-level snapshot tests (headings, tables, dark mode, images)
-├── Frameworks/                   # Pre-built XCFramework output
+├── MarkdownDemoUITests/          # UI performance tests (streaming hitch detection)
+├── Frameworks/                   # Pre-built XCFramework output (Git LFS)
 ├── build/                        # Dynamic build mirror (for xcframework)
 ├── scripts/
 │   ├── run-tests.sh              # Unit tests via xcodebuild
@@ -42,8 +43,9 @@ ios-markdown-demo/
 │   └── build-xcframework.sh      # Static/dynamic XCFramework build
 ├── .github/workflows/
 │   ├── pr-tests.yml              # CI: macOS 15, tests + SwiftLint
-│   └── release-xcframework.yml   # Release: build + upload XCFramework
+│   └── create-release.yml        # Release: test → build XCFramework on macOS 14/Xcode 15.4
 ├── .swiftlint.yml                # Scoped to Sources + MarkdownDemo
+├── .gitattributes                # Git LFS for Frameworks/** and __Snapshots__/**/*.png
 └── Package.swift                 # Root SPM manifest (swift-tools-version 5.9, iOS 15+)
 ```
 
@@ -63,7 +65,8 @@ ios-markdown-demo/
 | **Code block streaming** | Utils/CodeBlockAnalyzer.swift | Detects unclosed fences, skips highlighting on incomplete blocks |
 | **Logging/debugging** | Utils/MarkdownLogger.swift | `subsystem:com.stx.markdown`, categories per module |
 | **Demo app** | MarkdownDemo/ViewController.swift | Chat UITableView + streaming simulator |
-| **Performance tests** | Tests/Performance/ | StreamingPerformanceTests (1400+ lines), benchmark baselines |
+| **Performance instrumentation** | Core/MarkdownView.swift | `RenderPipelineStats`, `OSSignposter`, `isRenderPipelineStatsEnabled` |
+| **Performance tests** | Tests/Performance/ | StreamingPerformanceTests (2300+ lines), DisplayPipelineHitchTests, MemoryFootprintTests |
 
 ## ARCHITECTURE
 
@@ -161,6 +164,7 @@ open MarkdownDemo.xcodeproj
 - `TableCellSizeCache` has 4 independent caches (intrinsic/height/layout/cellParse) with LRU eviction
 - `ImageCache` uses CGImageSource downsampling to reduce memory; two-tier (memory + disk) with adaptive limits
 - CI runs on macOS 15 (PR tests) and macOS 14 + Xcode 15.4 (release builds)
+- Git LFS tracks Frameworks/** (XCFramework binaries) and **/__Snapshots__/**/*.png (snapshot baselines)
 
 ## SNAPSHOT TESTING
 

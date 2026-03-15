@@ -27,12 +27,12 @@ STXMarkdownView/
 │       ├── MarkdownLogger.swift       # os_log wrapper, subsystem:com.stx.markdown
 │       └── TableCellSizeCache.swift   # 4-layer LRU (intrinsic/height/layout/cellParse)
 └── Tests/
-    ├── Core/           # MarkdownParser tests
+    ├── Core/           # Parser tests (3 files: InlineParser, MarkdownParser, MarkdownRenderer)
     ├── Views/          # View unit tests (4 files)
     ├── Utils/          # Pool, ContentKey, Cache, Logger tests (6 files)
     ├── Theme/          # Theme configuration tests
-    ├── Integration/    # Full render pipeline + streaming render tests
-    ├── Performance/    # StreamingPerformanceTests (1400+ lines, benchmark baselines)
+    ├── Integration/    # Full render pipeline + streaming invariants (4 files)
+    ├── Performance/    # Streaming benchmarks + memory/hitch profiling (3 files, 3000+ lines)
     ├── Snapshot/       # Visual regression (library-level)
     └── Helpers/        # Test utilities
 ```
@@ -50,7 +50,7 @@ STXMarkdownView/
 | Table caching | TableCellSizeCache.swift | 4 independent caches, LRU eviction |
 | Image pipeline | ImageCache.swift | 2-tier cache, CGImageSource downsampling |
 | Code streaming | CodeBlockAnalyzer.swift | Unclosed fence detection, skip highlighting |
-| Performance tests | Tests/Performance/ | Streaming benchmarks, 1400+ lines |
+| Performance tests | Tests/Performance/ | Streaming benchmarks, memory/hitch profiling (3 files, 3000+ lines) |
 
 ## CONVENTIONS
 

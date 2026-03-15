@@ -1,7 +1,7 @@
 # MarkdownView
 
 [![PR Unit Tests](https://github.com/SteinX/MarkdownView/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/SteinX/MarkdownView/actions/workflows/pr-tests.yml)
-[![Build XCFramework](https://github.com/SteinX/MarkdownView/actions/workflows/release-xcframework.yml/badge.svg)](https://github.com/SteinX/MarkdownView/actions/workflows/release-xcframework.yml)
+[![Create Release](https://github.com/SteinX/MarkdownView/actions/workflows/create-release.yml/badge.svg)](https://github.com/SteinX/MarkdownView/actions/workflows/create-release.yml)
 [![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org)
 [![iOS](https://img.shields.io/badge/iOS-15.0%2B-blue.svg)](https://developer.apple.com/ios/)
 [![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen.svg)](https://swift.org/package-manager/)
@@ -31,13 +31,16 @@ MarkdownView/
 
 | Feature | Description |
 |---------|-------------|
-| **Rich Attachments** | Tables, code blocks, images, block quotes as embedded views |
+| **Rich Attachments** | Tables, code blocks, images, block quotes, horizontal rules as embedded views |
 | **Streaming Mode** | Throttled rendering for real-time chat/AI assistant UI |
 | **Syntax Highlighting** | Optional Highlightr integration for code blocks |
 | **Adaptive Tables** | Auto-switch between compact and scrollable layout |
-| **Image Caching** | Memory + disk cache with async loading |
+| **Nested Block Quotes** | Recursive rendering with full markdown support inside quotes |
+| **Task Lists** | Checkbox-style task lists (- [ ] / - [x]) |
+| **Dark Mode** | Full dark mode support with theme-aware rendering |
+| **Image Caching** | Memory + disk cache with async loading and downsampling |
 | **Theme System** | Fully customizable colors, fonts, and spacing |
-| **Performance** | Attachment reuse, incremental rendering, minimal re-layouts |
+| **Performance** | Attachment reuse pool, incremental rendering, minimal re-layouts |
 
 ## Requirements
 
@@ -90,6 +93,8 @@ Then run:
 pod install
 ```
 
+> **Note:** CocoaPods distribution uses a pre-built XCFramework (vendored framework).
+
 ### 2. Basic Usage
 
 ````swift
@@ -108,6 +113,17 @@ print("Hello, World!")
 
 view.addSubview(markdownView)
 ````
+
+> **Important:** When using inside `UITableViewCell` or any width-constrained container, always set `preferredMaxLayoutWidth` **before** setting `markdown`. This ensures proper layout calculation.
+
+```swift
+// In UITableViewCell
+override func layoutSubviews() {
+    super.layoutSubviews()
+    markdownView.preferredMaxLayoutWidth = contentView.bounds.width - padding
+    markdownView.markdown = text
+}
+```
 
 ### 3. Streaming Mode (Chat UI)
 
@@ -145,7 +161,7 @@ markdownView.theme = theme
 ### 5. Debug Logging
 
 ```swift
-// Enable verbose logging (view in Console.app, filter: subsystem:com.app.markdown)
+// Enable verbose logging (view in Console.app, filter: subsystem:com.stx.markdown)
 MarkdownView.logLevel = .verbose
 
 // Other levels: .info, .error, .off
@@ -175,8 +191,9 @@ MarkdownView (UIView)
 **Key Components:**
 
 - **MarkdownParser**: Converts Markdown → NSAttributedString + attachment placeholders
-- **MarkdownRenderer**: Manages attachment view lifecycle and reuse
-- **MarkdownTextView**: Custom UITextView with attachment layout support
+- **MarkdownRenderer**: Coordinates parsing and rendering pipeline
+- **AttachmentPool**: Manages attachment view lifecycle with content-keyed reuse
+- **MarkdownTextView**: Custom UITextView (TextKit1) with glyph-based attachment positioning
 
 ## Dependencies
 
@@ -185,6 +202,16 @@ MarkdownView (UIView)
 | [swift-markdown](https://github.com/swiftlang/swift-markdown) | Markdown parsing |
 | [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing) | Snapshot tests |
 | [Highlightr](https://github.com/raspu/Highlightr) | Syntax highlighting (optional) |
+
+## Contributing
+
+This project uses [Git LFS](https://git-lfs.github.com/) for XCFramework binaries and snapshot baseline images. Install Git LFS before cloning:
+
+```bash
+brew install git-lfs
+git lfs install
+git clone https://github.com/SteinX/MarkdownView.git
+```
 
 ## License
 
