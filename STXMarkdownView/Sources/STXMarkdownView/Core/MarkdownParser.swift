@@ -479,8 +479,16 @@ struct MarkdownParser: MarkupWalker {
             isInsideQuote: isInsideQuote
         )
 
-        if let pool = attachmentPool,
-           let (pooledView, exactMatch): (QuoteView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming),
+        // Single dequeue to avoid pool leak (view removed but discarded on fast-path miss)
+        let dequeuedResult: (QuoteView, Bool)?
+        if let pool = attachmentPool {
+            dequeuedResult = pool.dequeue(for: contentKey, isStreaming: isStreaming)
+        } else {
+            dequeuedResult = nil
+        }
+
+        // Fast path: exact match with valid height → skip expensive child parsing
+        if let (pooledView, exactMatch) = dequeuedResult,
            exactMatch,
            pooledView.frame.size.height > 0 {
             let finalSize = CGSize(width: availableWidth, height: pooledView.frame.size.height)
@@ -508,10 +516,10 @@ struct MarkdownParser: MarkupWalker {
         let attributedText = childParser.attributedString
         let attachments = childParser.attachments
         
+        // Reuse the already-dequeued view (or create new)
         let view: QuoteView
         var isExactMatch = false
-        if let pool = attachmentPool,
-           let (pooledView, exactMatch): (QuoteView, Bool) = pool.dequeue(for: contentKey, isStreaming: isStreaming) {
+        if let (pooledView, exactMatch) = dequeuedResult {
             view = pooledView
             isExactMatch = exactMatch
             if !exactMatch {

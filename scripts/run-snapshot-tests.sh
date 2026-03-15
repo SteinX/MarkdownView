@@ -74,14 +74,16 @@ run_library_snapshots() {
   ln -s "$ROOT_DIR/STXMarkdownView" "$sandbox/STXMarkdownView"
 
   cd "$sandbox"
+  local result=0
   TEST_RUNNER_SNAPSHOT_RECORDING="$SNAPSHOT_RECORDING" \
   xcodebuild test \
     -scheme STXMarkdownView \
     -destination "$DESTINATION" \
     -only-testing:STXMarkdownViewTests/MarkdownViewSnapshotTests \
     CODE_SIGNING_ALLOWED=NO \
-    2>&1
+    2>&1 || result=$?
   cd "$ROOT_DIR"
+  return $result
 }
 
 EXIT_CODE=0
