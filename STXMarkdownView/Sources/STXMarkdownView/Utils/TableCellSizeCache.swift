@@ -1,4 +1,5 @@
 import UIKit
+import os
 
 public final class TableCellSizeCache {
     private struct IntrinsicKey: Hashable {
@@ -65,7 +66,7 @@ public final class TableCellSizeCache {
         }
     }
 
-    private let lock = NSLock()
+    private var lock = os_unfair_lock()
     private var intrinsicCache: [IntrinsicKey: IntrinsicEntry] = [:]
     private var heightCache: [HeightKey: HeightEntry] = [:]
     private var layoutCache: [LayoutKey: LayoutEntry] = [:]
@@ -101,8 +102,8 @@ public final class TableCellSizeCache {
 
     func intrinsicWidth(for text: NSAttributedString) -> CGFloat? {
         let key = IntrinsicKey(contentHash: text.hash)
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         guard var entry = intrinsicCache[key] else { return nil }
         accessCounter += 1
@@ -115,8 +116,8 @@ public final class TableCellSizeCache {
     func height(for text: NSAttributedString, width: CGFloat) -> CGFloat? {
         let widthKey = Int(round(max(0, width)))
         let key = HeightKey(contentHash: text.hash, width: widthKey)
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         guard var entry = heightCache[key] else { return nil }
         accessCounter += 1
@@ -128,29 +129,29 @@ public final class TableCellSizeCache {
 
     func storeIntrinsic(text: NSAttributedString, width: CGFloat, height: CGFloat) {
         let key = IntrinsicKey(contentHash: text.hash)
-        lock.lock()
+        os_unfair_lock_lock(&lock)
         accessCounter += 1
         intrinsicCache[key] = IntrinsicEntry(width: width, height: height, lastAccess: accessCounter)
         missesIntrinsic += 1
         evictIfNeeded()
-        lock.unlock()
+        os_unfair_lock_unlock(&lock)
     }
 
     func storeHeight(text: NSAttributedString, width: CGFloat, height: CGFloat) {
         let widthKey = Int(round(max(0, width)))
         let key = HeightKey(contentHash: text.hash, width: widthKey)
-        lock.lock()
+        os_unfair_lock_lock(&lock)
         accessCounter += 1
         heightCache[key] = HeightEntry(height: height, lastAccess: accessCounter)
         missesHeight += 1
         evictIfNeeded()
-        lock.unlock()
+        os_unfair_lock_unlock(&lock)
     }
 
     func cachedLayout(dataHash: Int, width: CGFloat) -> MarkdownTableLayoutResult? {
         let key = LayoutKey(dataHash: dataHash, width: Int(round(max(0, width))))
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         guard var entry = layoutCache[key] else {
             missesLayout += 1
@@ -165,7 +166,7 @@ public final class TableCellSizeCache {
 
     func storeLayout(_ result: MarkdownTableLayoutResult, dataHash: Int, width: CGFloat) {
         let key = LayoutKey(dataHash: dataHash, width: Int(round(max(0, width))))
-        lock.lock()
+        os_unfair_lock_lock(&lock)
         accessCounter += 1
         layoutCache[key] = LayoutEntry(result: result, lastAccess: accessCounter)
         if layoutCache.count > maxLayoutEntries {
@@ -175,20 +176,20 @@ public final class TableCellSizeCache {
                 layoutCache.removeValue(forKey: sorted[i].key)
             }
         }
-        lock.unlock()
+        os_unfair_lock_unlock(&lock)
     }
 
     func cachedCellParse(contentHash: Int, isHeader: Bool, themeSignature: Int) -> NSAttributedString? {
         let key = CellParseCacheKey(contentHash: contentHash, isHeader: isHeader, themeSignature: themeSignature)
         if let cached = cellParseCache.object(forKey: key) {
-            lock.lock()
+            os_unfair_lock_lock(&lock)
             hitsCellParse += 1
-            lock.unlock()
+            os_unfair_lock_unlock(&lock)
             return cached
         }
-        lock.lock()
+        os_unfair_lock_lock(&lock)
         missesCellParse += 1
-        lock.unlock()
+        os_unfair_lock_unlock(&lock)
         return nil
     }
 
@@ -230,8 +231,8 @@ public final class TableCellSizeCache {
     }
 
     func logStats(context: String) {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         let totalHits = hitsIntrinsic + hitsHeight
         let totalMisses = missesIntrinsic + missesHeight
@@ -244,8 +245,8 @@ public final class TableCellSizeCache {
     }
     
     func clearAll() {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
         
         let count = intrinsicCache.count + heightCache.count + layoutCache.count
         intrinsicCache.removeAll()

@@ -1,4 +1,5 @@
 import UIKit
+import os
 
 /// Pool for reusing attachment views to reduce allocation overhead during streaming.
 /// Uses a content-keyed dictionary with time-based expiry and LRU eviction.
@@ -9,7 +10,7 @@ public class AttachmentPool {
     private var streamingPool: [String: UIView] = [:]
     private let expirationInterval: TimeInterval = 10
     private let maxPoolSize: Int
-    private let lock = NSLock()
+    private var lock = os_unfair_lock()
 
     private var hitCount = 0
     private var missCount = 0
@@ -45,8 +46,8 @@ public class AttachmentPool {
     /// Returns nil if no views are available for the key.
     /// If the view comes from the streaming pool, exactMatch will be false.
     public func dequeue<T: UIView, K: AttachmentContentKey>(for key: K, isStreaming: Bool) -> (view: T, exactMatch: Bool)? {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         let anyKey = AnyHashable(key)
         MarkdownLogger.verbose(.pool, "dequeue request key=\(String(describing: K.self)) hash=\(anyKey.hashValue) keys=\(contentPool.count) streaming=\(streamingPool.count) isStreaming=\(isStreaming)")
@@ -91,8 +92,8 @@ public class AttachmentPool {
 
     /// Recycle using an already-typed AnyHashable key.
     public func recycle(_ view: UIView, anyKey: AnyHashable, isStreaming: Bool) {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         view.removeFromSuperview()
 
@@ -115,8 +116,8 @@ public class AttachmentPool {
 
     /// Clear all pooled views (useful for memory warnings).
     public func clear() {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         contentPool.removeAll()
         accessTimestamps.removeAll()
@@ -133,8 +134,8 @@ public class AttachmentPool {
     }
 
     public func logStats(context: String) {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         let totalViews = contentPool.values.reduce(0) { $0 + $1.count }
 
@@ -196,8 +197,8 @@ public class AttachmentPool {
     }
 
     @objc private func handleMemoryWarning() {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
 
         let sortedKeys = accessTimestamps.sorted { $0.value < $1.value }.map(\.key)
         let evictCount = sortedKeys.count / 2
@@ -215,8 +216,8 @@ public class AttachmentPool {
     /// Proactively trim pool to the given target size, evicting LRU entries.
     /// Call after render to keep memory bounded proportional to active content.
     public func trimToSize(_ targetSize: Int) {
-        lock.lock()
-        defer { lock.unlock() }
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
         
         var currentTotal = contentPool.values.reduce(0) { $0 + $1.count }
         guard currentTotal > targetSize else { return }
